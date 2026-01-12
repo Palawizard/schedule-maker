@@ -1,26 +1,98 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f6f0e6;
+  --foreground: #141b2a;
+  --paper: #fff8ee;
+  --paper-strong: #ffffff;
+  --ink-muted: #4a5668;
+  --border-soft: #e3dacb;
+  --accent: #f26b3a;
+  --accent-strong: #d85022;
+  --sea: #1c6e62;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: var(--font-space-grotesk);
+  --font-mono: var(--font-space-grotesk);
+  --font-display: var(--font-fraunces);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), "Segoe UI", sans-serif;
+}
+
+.font-display {
+  font-family: var(--font-display), var(--font-sans), serif;
+}
+
+.page-shell {
+  background-color: var(--background);
+  background-image:
+    linear-gradient(rgba(20, 27, 42, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(20, 27, 42, 0.04) 1px, transparent 1px),
+    radial-gradient(circle at 12% 8%, #fff1d8 0%, rgba(255, 241, 216, 0) 55%),
+    radial-gradient(circle at 85% 12%, rgba(199, 235, 224, 0.7) 0%, rgba(199, 235, 224, 0) 48%),
+    linear-gradient(135deg, #f7efe0 0%, #f1f5f1 60%, #f7efe0 100%);
+  background-size: 36px 36px, 36px 36px, auto, auto, auto;
+  background-position: -1px -1px, -1px -1px, 12% 8%, 85% 12%, 0 0;
+  background-repeat: repeat, repeat, no-repeat, no-repeat, no-repeat;
+}
+
+.hero-glow {
+  background: radial-gradient(circle, rgba(242, 107, 58, 0.15) 0%, rgba(242, 107, 58, 0) 70%);
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes float-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.8s ease-out both;
+}
+
+.animate-float-in {
+  animation: float-in 0.9s ease-out both;
+}
+
+[data-exporting="true"] .ring-2,
+[data-exporting="true"] .ring-1,
+[data-exporting="true"] [class*="ring-cyan"] {
+  box-shadow: none !important;
+}
+
+[data-exporting="true"] [class*="border-cyan"] {
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+[data-exporting="true"] [class*="outline-cyan"] {
+  outline: none !important;
+}
+
+[data-exporting="true"] *:focus,
+[data-exporting="true"] *:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
 }

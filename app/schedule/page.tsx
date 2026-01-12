@@ -1,0 +1,1747 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
+import { toPng } from "html-to-image";
+import StorySchedulePreview, { StoryDay } from "./StorySchedulePreview";
+
+const weekDays = [
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+];
+
+const exportSizes = [
+  { id: "story", label: "Story", width: 1080, height: 1920 },
+  { id: "youtube", label: "YouTube post", width: 1280, height: 720 },
+  { id: "x-vertical", label: "X vertical", width: 1080, height: 1920 },
+  { id: "x-horizontal", label: "X horizontal", width: 1600, height: 900 },
+];
+
+type FlagKey = "uk" | "us" | "eu" | "jp" | "au" | "globe";
+
+type TimeZoneOption = {
+  id: string;
+  label: string;
+};
+
+type SlotZoneOption = {
+  id: string;
+  label: string;
+  timeZone: string | null;
+  flag: FlagKey;
+  description: string;
+};
+
+const defaultTimeZones: TimeZoneOption[] = [
+  { id: "Europe/Paris", label: "Paris (CET)" },
+  { id: "Europe/London", label: "London (UK)" },
+  { id: "America/New_York", label: "US Eastern (ET)" },
+  { id: "America/Chicago", label: "US Central (CT)" },
+  { id: "America/Denver", label: "US Mountain (MT)" },
+  { id: "America/Los_Angeles", label: "US Pacific (PT)" },
+  { id: "Asia/Tokyo", label: "Tokyo (JST)" },
+  { id: "Australia/Sydney", label: "Sydney (AET)" },
+  { id: "UTC", label: "UTC" },
+];
+
+const slotZoneOptions: SlotZoneOption[] = [
+  {
+    id: "uk",
+    label: "UK",
+    timeZone: "Europe/London",
+    flag: "uk",
+    description: "Europe/London",
+  },
+  {
+    id: "us-et",
+    label: "US (ET)",
+    timeZone: "America/New_York",
+    flag: "us",
+    description: "America/New_York",
+  },
+  {
+    id: "us-ct",
+    label: "US (CT)",
+    timeZone: "America/Chicago",
+    flag: "us",
+    description: "America/Chicago",
+  },
+  {
+    id: "us-mt",
+    label: "US (MT)",
+    timeZone: "America/Denver",
+    flag: "us",
+    description: "America/Denver",
+  },
+  {
+    id: "us-pt",
+    label: "US (PT)",
+    timeZone: "America/Los_Angeles",
+    flag: "us",
+    description: "America/Los_Angeles",
+  },
+  {
+    id: "cet",
+    label: "Central Europe",
+    timeZone: "Europe/Paris",
+    flag: "eu",
+    description: "Europe/Paris",
+  },
+  {
+    id: "utc",
+    label: "UTC",
+    timeZone: "UTC",
+    flag: "globe",
+    description: "UTC",
+  },
+  {
+    id: "jst",
+    label: "Japan",
+    timeZone: "Asia/Tokyo",
+    flag: "jp",
+    description: "Asia/Tokyo",
+  },
+  {
+    id: "aet",
+    label: "Australia",
+    timeZone: "Australia/Sydney",
+    flag: "au",
+    description: "Australia/Sydney",
+  },
+  {
+    id: "custom",
+    label: "Custom",
+    timeZone: null,
+    flag: "globe",
+    description: "Manual entry",
+  },
+];
+
+
+const parseTimeValue = (value: string) => {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+  return { hours, minutes };
+};
+
+const getTimeZoneOffset = (date: Date, timeZone: string) => {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const asUTC = Date.UTC(
+    Number(values.year),
+    Number(values.month) - 1,
+    Number(values.day),
+    Number(values.hour),
+    Number(values.minute),
+    Number(values.second),
+  );
+  return (asUTC - date.getTime()) / 60000;
+};
+
+const buildBaseDate = (baseTime: string, baseTimeZone: string) => {
+  const parsed = parseTimeValue(baseTime);
+  if (!parsed) return null;
+  const now = new Date();
+  const utcDate = new Date(
+    Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+      parsed.hours,
+      parsed.minutes,
+      0,
+    ),
+  );
+  const offset = getTimeZoneOffset(utcDate, baseTimeZone);
+  return new Date(utcDate.getTime() - offset * 60000);
+};
+
+const formatTimeInZone = (date: Date, timeZone: string) =>
+  new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(date);
+
+const resolveThumbUrl = (value: string) => {
+  if (!value) return "";
+  if (
+    value.startsWith("blob:") ||
+    value.startsWith("data:") ||
+    value.startsWith("/api/image-proxy?url=")
+  ) {
+    return value;
+  }
+  if (/^https?:\/\//i.test(value)) {
+    return `/api/image-proxy?url=${encodeURIComponent(value)}`;
+  }
+  return value;
+};
+
+function FlagIcon({ flag }: { flag: FlagKey }) {
+  if (flag === "uk") {
+    return (
+      <svg viewBox="0 0 60 42" xmlns="http://www.w3.org/2000/svg">
+        <rect width="60" height="42" fill="#012169" />
+        <path d="M0,0 L60,42 M60,0 L0,42" stroke="#FFF" strokeWidth="8" />
+        <path d="M0,0 L60,42 M60,0 L0,42" stroke="#C8102E" strokeWidth="4" />
+        <path d="M30,0 V42 M0,21 H60" stroke="#FFF" strokeWidth="14" />
+        <path d="M30,0 V42 M0,21 H60" stroke="#C8102E" strokeWidth="8" />
+      </svg>
+    );
+  }
+  if (flag === "us") {
+    return (
+      <svg viewBox="0 0 60 42" xmlns="http://www.w3.org/2000/svg">
+        <rect width="60" height="42" fill="#FFF" />
+        <g fill="#B22234">
+          <rect y="0" width="60" height="4" />
+          <rect y="8" width="60" height="4" />
+          <rect y="16" width="60" height="4" />
+          <rect y="24" width="60" height="4" />
+          <rect y="32" width="60" height="4" />
+          <rect y="40" width="60" height="2" />
+        </g>
+        <rect width="26" height="22" fill="#3C3B6E" />
+      </svg>
+    );
+  }
+  if (flag === "eu") {
+    return (
+      <svg viewBox="0 0 60 42" xmlns="http://www.w3.org/2000/svg">
+        <rect width="60" height="42" fill="#1e3a8a" />
+        <circle cx="30" cy="10" r="2" fill="#facc15" />
+        <circle cx="38" cy="12" r="2" fill="#facc15" />
+        <circle cx="44" cy="18" r="2" fill="#facc15" />
+        <circle cx="44" cy="26" r="2" fill="#facc15" />
+        <circle cx="38" cy="32" r="2" fill="#facc15" />
+        <circle cx="30" cy="34" r="2" fill="#facc15" />
+        <circle cx="22" cy="32" r="2" fill="#facc15" />
+        <circle cx="16" cy="26" r="2" fill="#facc15" />
+        <circle cx="16" cy="18" r="2" fill="#facc15" />
+        <circle cx="22" cy="12" r="2" fill="#facc15" />
+      </svg>
+    );
+  }
+  if (flag === "jp") {
+    return (
+      <svg viewBox="0 0 60 42" xmlns="http://www.w3.org/2000/svg">
+        <rect width="60" height="42" fill="#FFF" />
+        <circle cx="30" cy="21" r="10" fill="#D7002D" />
+      </svg>
+    );
+  }
+  if (flag === "au") {
+    return (
+      <svg viewBox="0 0 60 42" xmlns="http://www.w3.org/2000/svg">
+        <rect width="60" height="42" fill="#0F1C6B" />
+        <circle cx="18" cy="16" r="6" fill="#FFF" />
+        <circle cx="44" cy="28" r="4" fill="#FDE047" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 60 42" xmlns="http://www.w3.org/2000/svg">
+      <rect width="60" height="42" fill="#0f172a" />
+      <circle cx="30" cy="21" r="14" fill="none" stroke="#38bdf8" strokeWidth="2" />
+      <path d="M16,21 H44" stroke="#38bdf8" strokeWidth="2" />
+      <path d="M30,7 V35" stroke="#38bdf8" strokeWidth="2" />
+      <ellipse cx="30" cy="21" rx="6" ry="14" fill="none" stroke="#38bdf8" strokeWidth="2" />
+    </svg>
+  );
+}
+
+const initialDays: StoryDay[] = [
+  {
+    id: "day-1",
+    day: "Tuesday",
+    date: "Jan 12",
+    title: "Test Stream then VRChat pics!",
+    thumbUrl:
+      "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/438100/capsule_616x353.jpg?t=1762366454",
+    off: false,
+    baseTime: "20:30",
+    times: [
+      {
+        id: "slot-1",
+        zoneId: "uk",
+        label: "",
+        time: "",
+        flag: "uk",
+        customLabel: "",
+        customTime: "",
+        customZone: "",
+        customEmoji: "",
+        customFlag: "globe",
+      },
+      {
+        id: "slot-2",
+        zoneId: "us-et",
+        label: "",
+        time: "",
+        flag: "us",
+        customLabel: "",
+        customTime: "",
+        customZone: "",
+        customEmoji: "",
+        customFlag: "globe",
+      },
+    ],
+  },
+  {
+    id: "day-2",
+    day: "Wednesday",
+    date: "",
+    title: "",
+    thumbUrl: "",
+    off: true,
+    baseTime: "20:30",
+    times: [],
+  },
+  {
+    id: "day-3",
+    day: "Thursday",
+    date: "Jan 14",
+    title: "Valorant ranked!",
+    thumbUrl:
+      "https://image.jeuxvideo.com/medias-sm/158341/1583411902-8477-jaquette-avant.jpg",
+    off: false,
+    baseTime: "20:30",
+    times: [
+      {
+        id: "slot-3",
+        zoneId: "uk",
+        label: "",
+        time: "",
+        flag: "uk",
+        customLabel: "",
+        customTime: "",
+        customZone: "",
+        customEmoji: "",
+        customFlag: "globe",
+      },
+      {
+        id: "slot-4",
+        zoneId: "us-et",
+        label: "",
+        time: "",
+        flag: "us",
+        customLabel: "",
+        customTime: "",
+        customZone: "",
+        customEmoji: "",
+        customFlag: "globe",
+      },
+    ],
+  },
+  {
+    id: "day-4",
+    day: "Friday",
+    date: "",
+    title: "",
+    thumbUrl: "",
+    off: true,
+    baseTime: "20:30",
+    times: [],
+  },
+  {
+    id: "day-5",
+    day: "Saturday",
+    date: "Jan 16",
+    title: "Starting an hardcore world!",
+    thumbUrl:
+      "https://www.nintendo.com/eu/media/images/10_share_images/games_15/nintendo_switch_4/2x1_NSwitch_Minecraft.jpg",
+    off: false,
+    baseTime: "20:30",
+    times: [
+      {
+        id: "slot-5",
+        zoneId: "uk",
+        label: "",
+        time: "",
+        flag: "uk",
+        customLabel: "",
+        customTime: "",
+        customZone: "",
+        customEmoji: "",
+        customFlag: "globe",
+      },
+      {
+        id: "slot-6",
+        zoneId: "us-et",
+        label: "",
+        time: "",
+        flag: "us",
+        customLabel: "",
+        customTime: "",
+        customZone: "",
+        customEmoji: "",
+        customFlag: "globe",
+      },
+    ],
+  },
+];
+
+type TimeSlot = StoryDay["times"][number];
+
+type SelectedElement =
+  | { type: "day"; id: string }
+  | { type: "header" }
+  | { type: "footer" }
+  | null;
+
+export default function SchedulePage() {
+  const idRef = useRef(100);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const [scheduleName, setScheduleName] = useState("Week 24");
+  const [timeZoneOptions, setTimeZoneOptions] =
+    useState<TimeZoneOption[]>(defaultTimeZones);
+  const [scheduleTimeZone, setScheduleTimeZone] = useState(
+    defaultTimeZones[0]?.id ?? "UTC",
+  );
+  const [days, setDays] = useState<StoryDay[]>(initialDays);
+  const [selectedDayId, setSelectedDayId] = useState<string | null>(
+    initialDays[0]?.id ?? null,
+  );
+  const [selectedElement, setSelectedElement] = useState<SelectedElement>(
+    initialDays[0]?.id ? { type: "day", id: initialDays[0].id } : null,
+  );
+  const [showHeader, setShowHeader] = useState(false);
+  const [headerTitle, setHeaderTitle] = useState("Weekly Schedule");
+  const [headerAlignment, setHeaderAlignment] = useState<"left" | "center">(
+    "left",
+  );
+  const [headerTone, setHeaderTone] = useState<"bright" | "soft">("bright");
+  const [showFooter, setShowFooter] = useState(true);
+  const [footerLink, setFooterLink] = useState("twitch.tv/yourname");
+  const [footerStyle, setFooterStyle] = useState<"solid" | "glass">("solid");
+  const [footerSize, setFooterSize] = useState<"regular" | "compact">(
+    "regular",
+  );
+  const [exportSizeId, setExportSizeId] = useState(
+    exportSizes[0]?.id ?? "story",
+  );
+  const [activeEmojiPickerId, setActiveEmojiPickerId] = useState<string | null>(
+    null,
+  );
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [exportRequested, setExportRequested] = useState(false);
+  const [isExportingView, setIsExportingView] = useState(false);
+  const [pendingDeleteDayId, setPendingDeleteDayId] = useState<string | null>(
+    null,
+  );
+  const [localThumbNames, setLocalThumbNames] = useState<Record<string, string>>(
+    {},
+  );
+  const objectUrlsRef = useRef<Record<string, string>>({});
+
+  const selectedDay = useMemo(
+    () => days.find((day) => day.id === selectedDayId) ?? null,
+    [days, selectedDayId],
+  );
+  const pendingDeleteDay = useMemo(
+    () => days.find((day) => day.id === pendingDeleteDayId) ?? null,
+    [days, pendingDeleteDayId],
+  );
+  const selectedExport = useMemo(
+    () =>
+      exportSizes.find((size) => size.id === exportSizeId) ?? exportSizes[0],
+    [exportSizeId],
+  );
+  const exportWidth = selectedExport?.width ?? 1080;
+  const exportHeight = selectedExport?.height ?? 1920;
+  const slotZoneMap = useMemo(
+    () => new Map(slotZoneOptions.map((option) => [option.id, option])),
+    [],
+  );
+  const scheduleTimeZoneLabel = useMemo(
+    () =>
+      timeZoneOptions.find((option) => option.id === scheduleTimeZone)?.label ??
+      scheduleTimeZone,
+    [scheduleTimeZone, timeZoneOptions],
+  );
+  const getSlotDisplay = useMemo(
+    () =>
+      (slot: TimeSlot, baseTime: string) => {
+        if (slot.zoneId === "custom") {
+          return {
+            label: slot.customLabel || slot.customZone || "Custom",
+            time: slot.customTime || "--:--",
+            flag: slot.customFlag,
+          };
+        }
+        const zone = slotZoneMap.get(slot.zoneId);
+        if (!zone || !zone.timeZone) {
+          return {
+            label: slot.customLabel || slot.customZone || "Custom",
+            time: slot.customTime || "--:--",
+            flag: slot.customFlag,
+          };
+        }
+        const baseDate = buildBaseDate(baseTime, scheduleTimeZone);
+        const time = baseDate
+          ? formatTimeInZone(baseDate, zone.timeZone)
+          : "--:--";
+        return {
+          label: zone.label,
+          time,
+          flag: zone.flag,
+        };
+      },
+    [scheduleTimeZone, slotZoneMap],
+  );
+  const previewDays = useMemo(
+    () =>
+      days.map((day) => ({
+        ...day,
+        thumbUrl: resolveThumbUrl(day.thumbUrl),
+        times: day.times.map((slot) => {
+          const display = getSlotDisplay(slot, day.baseTime);
+          return {
+            ...slot,
+            label: display.label,
+            time: display.time,
+            flag: display.flag,
+          };
+        }),
+      })),
+    [days, getSlotDisplay],
+  );
+
+  const selectDay = (id: string) => {
+    setSelectedDayId(id);
+    setSelectedElement({ type: "day", id });
+  };
+
+  const selectHeader = () => {
+    setSelectedElement({ type: "header" });
+  };
+
+  const selectFooter = () => {
+    setSelectedElement({ type: "footer" });
+  };
+
+  const showHeaderElement = () => {
+    setShowHeader(true);
+    setSelectedElement({ type: "header" });
+  };
+
+  const hideHeaderElement = () => {
+    setShowHeader(false);
+    if (selectedElement?.type === "header") {
+      setSelectedElement(
+        selectedDayId ? { type: "day", id: selectedDayId } : null,
+      );
+    }
+  };
+
+  const toggleHeader = () => {
+    if (showHeader) {
+      hideHeaderElement();
+    } else {
+      showHeaderElement();
+    }
+  };
+
+  const showFooterElement = () => {
+    setShowFooter(true);
+    setSelectedElement({ type: "footer" });
+  };
+
+  const hideFooterElement = () => {
+    setShowFooter(false);
+    if (selectedElement?.type === "footer") {
+      setSelectedElement(
+        selectedDayId ? { type: "day", id: selectedDayId } : null,
+      );
+    }
+  };
+
+  const toggleFooter = () => {
+    if (showFooter) {
+      hideFooterElement();
+    } else {
+      showFooterElement();
+    }
+  };
+
+  useEffect(() => {
+    const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const supported =
+      typeof Intl.supportedValuesOf === "function"
+        ? Intl.supportedValuesOf("timeZone")
+        : [];
+    const fallback = defaultTimeZones.map((option) => option.id);
+    const baseZones = supported.length ? supported : fallback;
+    const seen = new Set<string>();
+    const nextOptions: TimeZoneOption[] = [];
+    const addZone = (zone: string) => {
+      if (seen.has(zone)) return;
+      seen.add(zone);
+      nextOptions.push({
+        id: zone,
+        label: userTimeZone && zone === userTimeZone ? `Local (${zone})` : zone,
+      });
+    };
+    if (userTimeZone) addZone(userTimeZone);
+    baseZones.forEach(addZone);
+    setTimeZoneOptions(nextOptions);
+    if (userTimeZone) setScheduleTimeZone(userTimeZone);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      Object.values(objectUrlsRef.current).forEach((url) =>
+        URL.revokeObjectURL(url),
+      );
+    };
+  }, []);
+
+  const canAddDay = days.length < 7;
+
+  const getNextDayName = (currentDays: StoryDay[]) => {
+    const used = new Set(currentDays.map((day) => day.day.toLowerCase()));
+    return (
+      weekDays.find((day) => !used.has(day.toLowerCase())) ??
+      `Day ${currentDays.length + 1}`
+    );
+  };
+
+  const createTimeSlot = (): TimeSlot => ({
+    id: `slot-${idRef.current++}`,
+    zoneId: "uk",
+    label: "",
+    time: "",
+    flag: "uk",
+    customLabel: "",
+    customTime: "",
+    customZone: "",
+    customEmoji: "",
+    customFlag: "globe",
+  });
+
+  const createDay = (dayName: string): StoryDay => ({
+    id: `day-${idRef.current++}`,
+    day: dayName,
+    date: "",
+    title: "New stream",
+    thumbUrl: "",
+    off: false,
+    baseTime: "20:30",
+    times: [createTimeSlot()],
+  });
+
+  const addDay = (position: "top" | "bottom") => {
+    if (!canAddDay) return;
+    const dayName = getNextDayName(days);
+    const newDay = createDay(dayName);
+    setDays((prev) =>
+      position === "top" ? [newDay, ...prev] : [...prev, newDay],
+    );
+    selectDay(newDay.id);
+  };
+
+  const updateDay = (id: string, patch: Partial<StoryDay>) => {
+    setDays((prev) =>
+      prev.map((day) => (day.id === id ? { ...day, ...patch } : day)),
+    );
+  };
+
+  const updateThumbnailUrl = (dayId: string, value: string) => {
+    const existingUrl = objectUrlsRef.current[dayId];
+    if (existingUrl) {
+      URL.revokeObjectURL(existingUrl);
+      delete objectUrlsRef.current[dayId];
+      setLocalThumbNames((prev) => {
+        const next = { ...prev };
+        delete next[dayId];
+        return next;
+      });
+    }
+    updateDay(dayId, { thumbUrl: value });
+  };
+
+  const handleThumbnailUpload = (dayId: string, file: File) => {
+    const nextUrl = URL.createObjectURL(file);
+    const existingUrl = objectUrlsRef.current[dayId];
+    if (existingUrl) {
+      URL.revokeObjectURL(existingUrl);
+    }
+    objectUrlsRef.current[dayId] = nextUrl;
+    setLocalThumbNames((prev) => ({ ...prev, [dayId]: file.name }));
+    updateDay(dayId, { thumbUrl: nextUrl });
+  };
+
+  const clearThumbnail = (dayId: string) => {
+    const existingUrl = objectUrlsRef.current[dayId];
+    if (existingUrl) {
+      URL.revokeObjectURL(existingUrl);
+      delete objectUrlsRef.current[dayId];
+    }
+    setLocalThumbNames((prev) => {
+      const next = { ...prev };
+      delete next[dayId];
+      return next;
+    });
+    updateDay(dayId, { thumbUrl: "" });
+  };
+
+  const updateTimeSlot = (
+    dayId: string,
+    slotId: string,
+    patch: Partial<TimeSlot>,
+  ) => {
+    setDays((prev) =>
+      prev.map((day) => {
+        if (day.id !== dayId) return day;
+        return {
+          ...day,
+          times: day.times.map((slot) =>
+            slot.id === slotId ? { ...slot, ...patch } : slot,
+          ),
+        };
+      }),
+    );
+  };
+
+  const handleEmojiPick =
+    (dayId: string, slotId: string) => (emojiData: EmojiClickData) => {
+      updateTimeSlot(dayId, slotId, { customEmoji: emojiData.emoji });
+      setActiveEmojiPickerId(null);
+    };
+
+  const addTimeSlot = (dayId: string) => {
+    setDays((prev) =>
+      prev.map((day) =>
+        day.id === dayId
+          ? { ...day, times: [...day.times, createTimeSlot()] }
+          : day,
+      ),
+    );
+  };
+
+  const removeTimeSlot = (dayId: string, slotId: string) => {
+    setDays((prev) =>
+      prev.map((day) =>
+        day.id === dayId
+          ? { ...day, times: day.times.filter((slot) => slot.id !== slotId) }
+          : day,
+      ),
+    );
+  };
+
+  const requestDeleteDay = (dayId: string) => {
+    setPendingDeleteDayId(dayId);
+  };
+
+  const removeDay = (dayId: string) => {
+    const existingUrl = objectUrlsRef.current[dayId];
+    if (existingUrl) {
+      URL.revokeObjectURL(existingUrl);
+      delete objectUrlsRef.current[dayId];
+    }
+    setLocalThumbNames((prev) => {
+      if (!prev[dayId]) return prev;
+      const next = { ...prev };
+      delete next[dayId];
+      return next;
+    });
+    setDays((prev) => {
+      const next = prev.filter((day) => day.id !== dayId);
+      if (selectedDayId === dayId) {
+        const nextId = next[0]?.id ?? null;
+        setSelectedDayId(nextId);
+        if (selectedElement?.type === "day") {
+          setSelectedElement(nextId ? { type: "day", id: nextId } : null);
+        }
+      }
+      return next;
+    });
+  };
+
+  const confirmDeleteDay = () => {
+    if (!pendingDeleteDayId) return;
+    removeDay(pendingDeleteDayId);
+    setPendingDeleteDayId(null);
+  };
+
+  const cancelDeleteDay = () => {
+    setPendingDeleteDayId(null);
+  };
+
+  const handleDownload = () => {
+    if (!previewRef.current || isDownloading || exportRequested) return;
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    setSelectedElement(null);
+    setIsExportingView(true);
+    setIsDownloading(true);
+    setExportRequested(true);
+  };
+
+  const handleDownloadClick = () => {
+    if (!isPreviewMode) {
+      setIsPreviewMode(true);
+      return;
+    }
+    handleDownload();
+  };
+
+  useEffect(() => {
+    if (!exportRequested || !isExportingView) return;
+    const exportNode = previewRef.current;
+    if (!exportNode) {
+      setIsDownloading(false);
+      setExportRequested(false);
+      setIsExportingView(false);
+      return;
+    }
+
+    exportNode.setAttribute("data-exporting", "true");
+    const runExport = async () => {
+      try {
+        await new Promise((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(resolve)),
+        );
+        const dataUrl = await toPng(exportNode, {
+          pixelRatio: 1,
+          cacheBust: true,
+          includeQueryParams: true,
+          skipFonts: true,
+          fontEmbedCSS: "",
+          width: exportWidth,
+          height: exportHeight,
+          style: {
+            transform: "scale(1)",
+            transformOrigin: "top left",
+          },
+        });
+        const safeName = scheduleName
+          .trim()
+          .replace(/[^a-z0-9]+/gi, "-")
+          .replace(/^-+|-+$/g, "")
+          .toLowerCase();
+        const safeExport = (selectedExport?.label ?? exportSizeId)
+          .trim()
+          .replace(/[^a-z0-9]+/gi, "-")
+          .replace(/^-+|-+$/g, "")
+          .toLowerCase();
+        const fileBase = safeName || "schedule";
+        const exportBase = safeExport || "export";
+        const link = document.createElement("a");
+        link.href = dataUrl;
+        link.download = `${fileBase}-${exportBase}.png`;
+        link.click();
+      } catch (error) {
+        console.error("Failed to export image", error);
+      } finally {
+        exportNode.setAttribute("data-exporting", "false");
+        setIsDownloading(false);
+        setExportRequested(false);
+        setIsExportingView(false);
+      }
+    };
+
+    runExport();
+  }, [
+    exportRequested,
+    isExportingView,
+    exportWidth,
+    exportHeight,
+    scheduleName,
+    exportSizeId,
+  ]);
+
+  return (
+    <div className="page-shell min-h-screen">
+      <div className="relative overflow-hidden">
+        <div className="hero-glow pointer-events-none absolute -top-32 left-0 h-[360px] w-[360px] opacity-70 blur-3xl" />
+        <header className="relative z-10 mx-auto w-full max-w-6xl px-6 py-6">
+          <div className="flex items-center justify-between rounded-[26px] border border-slate-200 bg-white px-4 py-3 shadow-[0_18px_40px_rgba(20,27,42,0.12)]">
+            <Link className="flex items-center gap-3 text-lg font-semibold" href="/">
+              <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[var(--accent)] text-white">
+                P
+              </span>
+              Pala's Stream Schedule Maker
+            </Link>
+            <Link
+              className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
+              href="/"
+            >
+              Back to home
+            </Link>
+          </div>
+        </header>
+
+        <main className="relative z-10 mx-auto w-full max-w-[1760px] px-3 pb-20 lg:px-5">
+          <div className="mb-8">
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
+              Builder
+            </p>
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <h1 className="font-display text-3xl text-slate-900 sm:text-4xl">
+                Schedule workshop
+              </h1>
+              <div className="flex items-center rounded-full border border-slate-200 bg-white p-1 text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setIsPreviewMode(false)}
+                  className={`rounded-full px-3 py-1 transition ${
+                    !isPreviewMode
+                      ? "bg-[var(--accent)] text-white"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsPreviewMode(true)}
+                  className={`rounded-full px-3 py-1 transition ${
+                    isPreviewMode
+                      ? "bg-[var(--accent)] text-white"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  Preview
+                </button>
+              </div>
+            </div>
+            <p className="mt-2 max-w-2xl text-sm text-slate-600">
+              General options and elements on the left, inspector on the right.
+              Center working area to build the week.
+            </p>
+          </div>
+
+          <section
+            className={`grid gap-5 ${
+              isPreviewMode
+                ? "lg:grid-cols-1"
+                : "lg:grid-cols-[280px_minmax(0,1fr)_280px]"
+            }`}
+          >
+            {!isPreviewMode ? (
+              <aside className="space-y-6">
+                <div className="rounded-[28px] border border-slate-200 bg-white/85 p-6 shadow-[0_24px_60px_rgba(20,27,42,0.1)]">
+                <h2 className="font-display text-xl text-slate-900">
+                  General options
+                </h2>
+                <div className="mt-4 space-y-4 text-sm text-slate-700">
+                  <label className="block">
+                    <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      Schedule name
+                    </span>
+                    <input
+                      className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                      value={scheduleName}
+                      onChange={(event) => setScheduleName(event.target.value)}
+                      type="text"
+                    />
+                  </label>
+
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      Time zone
+                    </p>
+                    <select
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                      value={scheduleTimeZone}
+                      onChange={(event) => setScheduleTimeZone(event.target.value)}
+                    >
+                      {timeZoneOptions.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      Visual style
+                    </p>
+                    <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-slate-700">
+                      Cream studio
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      Export size
+                    </p>
+                    <div className="space-y-2">
+                      {exportSizes.map((size) => (
+                        <button
+                          key={size.id}
+                          type="button"
+                          onClick={() => setExportSizeId(size.id)}
+                          aria-pressed={exportSizeId === size.id}
+                          className={`flex w-full items-center justify-between rounded-2xl border bg-white px-3 py-2 text-left text-xs font-semibold transition ${
+                            exportSizeId === size.id
+                              ? "border-[var(--accent)] text-slate-900"
+                              : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                          }`}
+                        >
+                          <span className="text-sm font-semibold text-slate-900">
+                            {size.label}
+                          </span>
+                          <span className="text-xs text-slate-500">
+                            {size.width} x {size.height}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+                <div className="rounded-[28px] border border-slate-200 bg-white/85 p-6 shadow-[0_20px_50px_rgba(20,27,42,0.08)]">
+                <h2 className="font-display text-xl text-slate-900">
+                  Elements menu
+                </h2>
+                <p className="mt-2 text-sm text-slate-600">
+                  Add optional elements to the canvas.
+                </p>
+                <div className="mt-4 space-y-3 text-sm text-slate-700">
+                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">
+                          Main title (top)
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          Top headline above the schedule.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={toggleHeader}
+                        className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                      >
+                        {showHeader ? "Remove" : "Add"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">
+                          Link pill (bottom)
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          Bottom call-to-action link.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={toggleFooter}
+                        className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                      >
+                        {showFooter ? "Remove" : "Add"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              </aside>
+            ) : null}
+
+            <div className="rounded-[32px] border border-slate-200 bg-white/80 p-6 shadow-[0_30px_80px_rgba(20,27,42,0.14)]">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+                    Working area
+                  </p>
+                  <h2 className="font-display text-2xl text-slate-900">
+                    {scheduleName.trim() || "Schedule"}
+                  </h2>
+                  <p className="mt-2 text-sm text-slate-600">
+                    {exportWidth}x{exportHeight}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2 text-sm font-semibold">
+                  <button
+                    type="button"
+                    onClick={handleDownloadClick}
+                    disabled={isDownloading || !isPreviewMode}
+                    className="rounded-full bg-[var(--accent)] px-4 py-2 text-white transition hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isDownloading
+                      ? "Preparing..."
+                      : isPreviewMode
+                        ? "Download PNG"
+                        : "Switch to preview mode to download"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-6 flex flex-col items-center rounded-[28px] border border-slate-200 bg-[var(--paper)] p-4">
+                <StorySchedulePreview
+                  days={previewDays}
+                  selectedDayId={selectedDayId}
+                  selectedTarget={
+                    isPreviewMode || isExportingView
+                      ? null
+                      : selectedElement?.type ?? null
+                  }
+                  onSelectDay={
+                    isPreviewMode || isExportingView ? () => {} : selectDay
+                  }
+                  onSelectHeader={
+                    isPreviewMode || isExportingView ? () => {} : selectHeader
+                  }
+                  onSelectFooter={
+                    isPreviewMode || isExportingView ? () => {} : selectFooter
+                  }
+                  onAddDay={addDay}
+                  onDeleteDay={requestDeleteDay}
+                  canAddDay={canAddDay}
+                  showAddControls={!isPreviewMode && !isExportingView}
+                  isExporting={isExportingView}
+                  canvasWidth={exportWidth}
+                  canvasHeight={exportHeight}
+                  showHeader={showHeader}
+                  headerTitle={headerTitle}
+                  headerAlignment={headerAlignment}
+                  headerTone={headerTone}
+                  showFooter={showFooter}
+                  footerLink={footerLink}
+                  footerStyle={footerStyle}
+                  footerSize={footerSize}
+                  exportRef={previewRef}
+                />
+              </div>
+            </div>
+
+            {!isPreviewMode ? (
+              <aside className="space-y-6">
+                <div className="rounded-[28px] border border-slate-200 bg-[var(--paper)] p-6 shadow-[0_20px_50px_rgba(20,27,42,0.08)]">
+                <h2 className="font-display text-xl text-slate-900">
+                  Inspector
+                </h2>
+                <p className="mt-2 text-sm text-slate-600">
+                  Click a block to show its details here.
+                </p>
+                {!selectedElement ? (
+                  <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white/80 px-4 py-6 text-sm text-slate-500">
+                    No element selected yet.
+                  </div>
+                ) : selectedElement.type === "day" && selectedDay ? (
+                  <div className="mt-4 space-y-4 text-sm text-slate-700">
+                    <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">
+                      {days.length} of 7 days used
+                    </div>
+
+                    <label className="block">
+                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                        Day name
+                      </span>
+                      <input
+                        className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                        value={selectedDay.day}
+                        onChange={(event) =>
+                          updateDay(selectedDay.id, { day: event.target.value })
+                        }
+                        type="text"
+                      />
+                    </label>
+
+                    <label className="block">
+                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                        Date label
+                      </span>
+                      <input
+                        className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                        value={selectedDay.date}
+                        onChange={(event) =>
+                          updateDay(selectedDay.id, { date: event.target.value })
+                        }
+                        type="text"
+                        placeholder="Jan 12"
+                      />
+                    </label>
+
+                    <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2">
+                      <input
+                        checked={selectedDay.off}
+                        onChange={(event) =>
+                          updateDay(selectedDay.id, { off: event.target.checked })
+                        }
+                        type="checkbox"
+                        className="h-4 w-4"
+                      />
+                      <span className="text-sm">Day off (no stream)</span>
+                    </label>
+
+                    <div className="space-y-4">
+                      {selectedDay.off ? (
+                        <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-3 py-3 text-xs text-slate-500">
+                          This day is off. Turn it back on to edit details.
+                        </div>
+                      ) : null}
+
+                      {!selectedDay.off ? (
+                        <div className="space-y-4">
+                          <label className="block">
+                            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                              Stream title
+                            </span>
+                            <input
+                              className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                              value={selectedDay.title}
+                              onChange={(event) =>
+                                updateDay(selectedDay.id, {
+                                  title: event.target.value,
+                                })
+                              }
+                              type="text"
+                              placeholder="New stream"
+                            />
+                          </label>
+
+                          <label className="block">
+                            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                              Thumbnail URL
+                            </span>
+                            <input
+                              className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                              value={selectedDay.thumbUrl}
+                              onChange={(event) =>
+                                updateThumbnailUrl(
+                                  selectedDay.id,
+                                  event.target.value,
+                                )
+                              }
+                              type="text"
+                              placeholder="https://..."
+                            />
+                          </label>
+
+                          <label className="block">
+                            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                              Upload thumbnail
+                            </span>
+                            <input
+                              className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm file:mr-4 file:rounded-full file:border-0 file:bg-slate-100 file:px-4 file:py-2 file:text-xs file:font-semibold file:text-slate-700"
+                              type="file"
+                              accept="image/*"
+                              onChange={(event) => {
+                                const file = event.target.files?.[0];
+                                if (file) {
+                                  handleThumbnailUpload(selectedDay.id, file);
+                                }
+                                event.currentTarget.value = "";
+                              }}
+                            />
+                            {localThumbNames[selectedDay.id] ? (
+                              <p className="mt-2 text-xs text-slate-500">
+                                Local file: {localThumbNames[selectedDay.id]}
+                              </p>
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() => clearThumbnail(selectedDay.id)}
+                              disabled={!selectedDay.thumbUrl}
+                              className="mt-3 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              Clear thumbnail
+                            </button>
+                          </label>
+
+                          <label className="block">
+                            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                              Stream time (base)
+                            </span>
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              <input
+                                className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                                value={selectedDay.baseTime}
+                                onChange={(event) =>
+                                  updateDay(selectedDay.id, {
+                                    baseTime: event.target.value,
+                                  })
+                                }
+                                type="time"
+                              />
+                              <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+                                {scheduleTimeZoneLabel}
+                              </div>
+                            </div>
+                          </label>
+
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                                Time slots
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => addTimeSlot(selectedDay.id)}
+                                className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                              >
+                                Add slot
+                              </button>
+                            </div>
+
+                            {selectedDay.times.length === 0 ? (
+                              <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-3 py-3 text-xs text-slate-500">
+                                No time slots yet.
+                              </div>
+                            ) : (
+                              selectedDay.times.map((slot) => {
+                                const display = getSlotDisplay(
+                                  slot,
+                                  selectedDay.baseTime,
+                                );
+                                const isCustom = slot.zoneId === "custom";
+                                return (
+                                  <div
+                                    key={slot.id}
+                                    className="rounded-2xl border border-slate-200 bg-white px-3 py-3"
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                                        Time zone
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          removeTimeSlot(
+                                            selectedDay.id,
+                                            slot.id,
+                                          )
+                                        }
+                                        className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                                      >
+                                        Remove
+                                      </button>
+                                    </div>
+
+                                    <div className="mt-2 grid grid-cols-2 gap-2">
+                                      {slotZoneOptions.map((option) => (
+                                        <button
+                                          key={option.id}
+                                          type="button"
+                                          onClick={() =>
+                                            updateTimeSlot(
+                                              selectedDay.id,
+                                              slot.id,
+                                              option.id === "custom"
+                                                ? {
+                                                    zoneId: option.id,
+                                                    flag:
+                                                      slot.customFlag || "globe",
+                                                    customFlag:
+                                                      slot.customFlag || "globe",
+                                                    customLabel:
+                                                      slot.customLabel || "Custom",
+                                                  }
+                                                : {
+                                                    zoneId: option.id,
+                                                    flag: option.flag,
+                                                    label: option.label,
+                                                  },
+                                            )
+                                          }
+                                          aria-pressed={slot.zoneId === option.id}
+                                          className={`flex flex-col gap-1 rounded-2xl border px-3 py-2 text-left text-xs font-semibold transition ${
+                                            slot.zoneId === option.id
+                                              ? "border-[var(--accent)] text-slate-900"
+                                              : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                                          }`}
+                                        >
+                                          <span className="flex items-center gap-2">
+                                            <span className="h-4 w-6 overflow-hidden rounded-[3px] shadow-[0_0_0_1px_rgba(15,23,42,0.12)]">
+                                              <FlagIcon flag={option.flag} />
+                                            </span>
+                                            <span>{option.label}</span>
+                                          </span>
+                                          <span className="text-[10px] text-slate-500">
+                                            {option.description}
+                                          </span>
+                                        </button>
+                                      ))}
+                                    </div>
+
+                                    {!isCustom ? (
+                                      <div className="mt-3 flex items-center justify-between rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                                        <span>Calculated time</span>
+                                        <span className="text-sm font-semibold text-slate-900">
+                                          {display.time}
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <div className="mt-3 space-y-3">
+                                        <div className="space-y-2">
+                                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                                            Emoji
+                                          </p>
+                                          <div className="relative">
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                setActiveEmojiPickerId((prev) =>
+                                                  prev === slot.id ? null : slot.id,
+                                                )
+                                              }
+                                              className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:text-slate-900"
+                                            >
+                                              <span className="text-base">
+                                                {slot.customEmoji || "Choose emoji"}
+                                              </span>
+                                              <span className="text-xs text-slate-500">
+                                                Picker
+                                              </span>
+                                            </button>
+                                            {activeEmojiPickerId === slot.id ? (
+                                              <div className="absolute z-20 mt-2">
+                                                <EmojiPicker
+                                                  onEmojiClick={handleEmojiPick(
+                                                    selectedDay.id,
+                                                    slot.id,
+                                                  )}
+                                                />
+                                              </div>
+                                            ) : null}
+                                          </div>
+                                        </div>
+
+                                        <label className="block">
+                                          <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                                            Time zone label
+                                          </span>
+                                          <input
+                                            className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                                            value={slot.customLabel}
+                                            onChange={(event) =>
+                                              updateTimeSlot(
+                                                selectedDay.id,
+                                                slot.id,
+                                                {
+                                                  customLabel: event.target.value,
+                                                  label: event.target.value,
+                                                },
+                                              )
+                                            }
+                                            type="text"
+                                            placeholder="Custom label"
+                                          />
+                                        </label>
+
+                                        <label className="block">
+                                          <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                                            Time zone name
+                                          </span>
+                                          <input
+                                            className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                                            value={slot.customZone}
+                                            onChange={(event) =>
+                                              updateTimeSlot(
+                                                selectedDay.id,
+                                                slot.id,
+                                                { customZone: event.target.value },
+                                              )
+                                            }
+                                            type="text"
+                                            placeholder="Asia/Singapore"
+                                          />
+                                        </label>
+
+                                        <label className="block">
+                                          <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                                            Stream time
+                                          </span>
+                                          <input
+                                            className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                                            value={slot.customTime}
+                                            onChange={(event) =>
+                                              updateTimeSlot(
+                                                selectedDay.id,
+                                                slot.id,
+                                                {
+                                                  customTime: event.target.value,
+                                                  time: event.target.value,
+                                                },
+                                              )
+                                            }
+                                            type="text"
+                                            placeholder="8:00 PM"
+                                          />
+                                        </label>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      <button
+                        type="button"
+                        onClick={() => requestDeleteDay(selectedDay.id)}
+                        className="w-full rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition hover:border-red-300 hover:text-red-800"
+                      >
+                        Delete day
+                      </button>
+                    </div>
+                  </div>
+                ) : selectedElement.type === "header" ? (
+                  <div className="mt-4 space-y-4 text-sm text-slate-700">
+                    <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">
+                      Main title settings
+                    </div>
+
+                    <label className="block">
+                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                        Title
+                      </span>
+                      <input
+                        className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                        value={headerTitle}
+                        onChange={(event) => setHeaderTitle(event.target.value)}
+                        type="text"
+                        placeholder="Weekly Schedule"
+                      />
+                    </label>
+
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                        Alignment
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setHeaderAlignment("left")}
+                          aria-pressed={headerAlignment === "left"}
+                          className={`flex-1 rounded-2xl border px-3 py-2 text-xs font-semibold transition ${
+                            headerAlignment === "left"
+                              ? "border-[var(--accent)] text-slate-900"
+                              : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                          }`}
+                        >
+                          Left
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setHeaderAlignment("center")}
+                          aria-pressed={headerAlignment === "center"}
+                          className={`flex-1 rounded-2xl border px-3 py-2 text-xs font-semibold transition ${
+                            headerAlignment === "center"
+                              ? "border-[var(--accent)] text-slate-900"
+                              : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                          }`}
+                        >
+                          Center
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                        Tone
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setHeaderTone("bright")}
+                          aria-pressed={headerTone === "bright"}
+                          className={`flex-1 rounded-2xl border px-3 py-2 text-xs font-semibold transition ${
+                            headerTone === "bright"
+                              ? "border-[var(--accent)] text-slate-900"
+                              : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                          }`}
+                        >
+                          Bright
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setHeaderTone("soft")}
+                          aria-pressed={headerTone === "soft"}
+                          className={`flex-1 rounded-2xl border px-3 py-2 text-xs font-semibold transition ${
+                            headerTone === "soft"
+                              ? "border-[var(--accent)] text-slate-900"
+                              : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                          }`}
+                        >
+                          Soft
+                        </button>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={hideHeaderElement}
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                    >
+                      Hide main title
+                    </button>
+                  </div>
+                ) : selectedElement.type === "footer" ? (
+                  <div className="mt-4 space-y-4 text-sm text-slate-700">
+                    <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">
+                      Link pill settings
+                    </div>
+
+                    <label className="block">
+                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                        Link text
+                      </span>
+                      <input
+                        className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                        value={footerLink}
+                        onChange={(event) => setFooterLink(event.target.value)}
+                        type="text"
+                        placeholder="twitch.tv/yourname"
+                      />
+                    </label>
+
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                        Style
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setFooterStyle("solid")}
+                          aria-pressed={footerStyle === "solid"}
+                          className={`flex-1 rounded-2xl border px-3 py-2 text-xs font-semibold transition ${
+                            footerStyle === "solid"
+                              ? "border-[var(--accent)] text-slate-900"
+                              : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                          }`}
+                        >
+                          Solid
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFooterStyle("glass")}
+                          aria-pressed={footerStyle === "glass"}
+                          className={`flex-1 rounded-2xl border px-3 py-2 text-xs font-semibold transition ${
+                            footerStyle === "glass"
+                              ? "border-[var(--accent)] text-slate-900"
+                              : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                          }`}
+                        >
+                          Glass
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                        Size
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setFooterSize("regular")}
+                          aria-pressed={footerSize === "regular"}
+                          className={`flex-1 rounded-2xl border px-3 py-2 text-xs font-semibold transition ${
+                            footerSize === "regular"
+                              ? "border-[var(--accent)] text-slate-900"
+                              : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                          }`}
+                        >
+                          Regular
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFooterSize("compact")}
+                          aria-pressed={footerSize === "compact"}
+                          className={`flex-1 rounded-2xl border px-3 py-2 text-xs font-semibold transition ${
+                            footerSize === "compact"
+                              ? "border-[var(--accent)] text-slate-900"
+                              : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                          }`}
+                        >
+                          Compact
+                        </button>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={hideFooterElement}
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                    >
+                      Hide link pill
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white/80 px-4 py-6 text-sm text-slate-500">
+                    No element selected yet.
+                  </div>
+                )}
+              </div>
+              </aside>
+            ) : null}
+          </section>
+          {pendingDeleteDayId ? (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4"
+              onClick={cancelDeleteDay}
+            >
+              <div
+                className="w-full max-w-sm rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_30px_80px_rgba(20,27,42,0.3)]"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
+                  Delete day
+                </p>
+                <h3 className="mt-2 font-display text-2xl text-slate-900">
+                  Remove {pendingDeleteDay?.day || "this day"}?
+                </h3>
+                <p className="mt-2 text-sm text-slate-600">
+                  This will remove the stream and its time slots from the
+                  schedule.
+                </p>
+                <div className="mt-5 flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={cancelDeleteDay}
+                    className="flex-1 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmDeleteDay}
+                    className="flex-1 rounded-full bg-red-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-600"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </main>
+      </div>
+    </div>
+  );
+}
