@@ -23,7 +23,20 @@ const exportSizes = [
   { id: "x-horizontal", label: "X horizontal", width: 1600, height: 900 },
 ];
 
-type FlagKey = "uk" | "us" | "eu" | "jp" | "au" | "globe";
+type FlagKey =
+  | "uk"
+  | "us"
+  | "eu"
+  | "jp"
+  | "au"
+  | "fr"
+  | "de"
+  | "es"
+  | "it"
+  | "br"
+  | "in"
+  | "kr"
+  | "globe";
 
 type TimeZoneOption = {
   id: string;
@@ -92,6 +105,55 @@ const slotZoneOptions: SlotZoneOption[] = [
     timeZone: "Europe/Paris",
     flag: "eu",
     description: "Europe/Paris",
+  },
+  {
+    id: "fr",
+    label: "France",
+    timeZone: "Europe/Paris",
+    flag: "fr",
+    description: "Europe/Paris",
+  },
+  {
+    id: "de",
+    label: "Germany",
+    timeZone: "Europe/Berlin",
+    flag: "de",
+    description: "Europe/Berlin",
+  },
+  {
+    id: "es",
+    label: "Spain",
+    timeZone: "Europe/Madrid",
+    flag: "es",
+    description: "Europe/Madrid",
+  },
+  {
+    id: "it",
+    label: "Italy",
+    timeZone: "Europe/Rome",
+    flag: "it",
+    description: "Europe/Rome",
+  },
+  {
+    id: "br",
+    label: "Brazil",
+    timeZone: "America/Sao_Paulo",
+    flag: "br",
+    description: "America/Sao_Paulo",
+  },
+  {
+    id: "in",
+    label: "India",
+    timeZone: "Asia/Kolkata",
+    flag: "in",
+    description: "Asia/Kolkata",
+  },
+  {
+    id: "kr",
+    label: "Korea",
+    timeZone: "Asia/Seoul",
+    flag: "kr",
+    description: "Asia/Seoul",
   },
   {
     id: "utc",
@@ -261,6 +323,76 @@ function FlagIcon({ flag }: { flag: FlagKey }) {
       </svg>
     );
   }
+  if (flag === "fr") {
+    return (
+      <svg viewBox="0 0 60 42" xmlns="http://www.w3.org/2000/svg">
+        <rect width="20" height="42" fill="#0055A4" />
+        <rect x="20" width="20" height="42" fill="#FFF" />
+        <rect x="40" width="20" height="42" fill="#EF4135" />
+      </svg>
+    );
+  }
+  if (flag === "de") {
+    return (
+      <svg viewBox="0 0 60 42" xmlns="http://www.w3.org/2000/svg">
+        <rect width="60" height="14" fill="#000" />
+        <rect y="14" width="60" height="14" fill="#DD0000" />
+        <rect y="28" width="60" height="14" fill="#FFCE00" />
+      </svg>
+    );
+  }
+  if (flag === "es") {
+    return (
+      <svg viewBox="0 0 60 42" xmlns="http://www.w3.org/2000/svg">
+        <rect width="60" height="10" fill="#AA151B" />
+        <rect y="10" width="60" height="22" fill="#F1BF00" />
+        <rect y="32" width="60" height="10" fill="#AA151B" />
+      </svg>
+    );
+  }
+  if (flag === "it") {
+    return (
+      <svg viewBox="0 0 60 42" xmlns="http://www.w3.org/2000/svg">
+        <rect width="20" height="42" fill="#009246" />
+        <rect x="20" width="20" height="42" fill="#FFF" />
+        <rect x="40" width="20" height="42" fill="#CE2B37" />
+      </svg>
+    );
+  }
+  if (flag === "br") {
+    return (
+      <svg viewBox="0 0 60 42" xmlns="http://www.w3.org/2000/svg">
+        <rect width="60" height="42" fill="#009C3B" />
+        <polygon points="30,6 54,21 30,36 6,21" fill="#FFDF00" />
+        <circle cx="30" cy="21" r="8" fill="#002776" />
+      </svg>
+    );
+  }
+  if (flag === "in") {
+    return (
+      <svg viewBox="0 0 60 42" xmlns="http://www.w3.org/2000/svg">
+        <rect width="60" height="14" fill="#FF9933" />
+        <rect y="14" width="60" height="14" fill="#FFF" />
+        <rect y="28" width="60" height="14" fill="#138808" />
+        <circle cx="30" cy="21" r="4" fill="#000080" />
+      </svg>
+    );
+  }
+  if (flag === "kr") {
+    return (
+      <svg viewBox="0 0 60 42" xmlns="http://www.w3.org/2000/svg">
+        <rect width="60" height="42" fill="#FFF" />
+        <path
+          d="M30 11 A10 10 0 0 1 40 21 A10 10 0 0 1 20 21 A10 10 0 0 1 30 11 Z"
+          fill="#CD2E3A"
+        />
+        <path
+          d="M30 31 A10 10 0 0 1 20 21 A10 10 0 0 1 40 21 A10 10 0 0 1 30 31 Z"
+          fill="#0047A0"
+        />
+      </svg>
+    );
+  }
   return (
     <svg viewBox="0 0 60 42" xmlns="http://www.w3.org/2000/svg">
       <rect width="60" height="42" fill="#0f172a" />
@@ -277,35 +409,40 @@ const initialDays: StoryDay[] = [
     id: "day-1",
     day: "Tuesday",
     date: "Jan 12",
-    title: "Test Stream then VRChat pics!",
-    thumbUrl:
-      "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/438100/capsule_616x353.jpg?t=1762366454",
     off: false,
-    baseTime: "20:30",
-    times: [
+    streams: [
       {
-        id: "slot-1",
-        zoneId: "uk",
-        label: "",
-        time: "",
-        flag: "uk",
-        customLabel: "",
-        customTime: "",
-        customZone: "",
-        customEmoji: "",
-        customFlag: "globe",
-      },
-      {
-        id: "slot-2",
-        zoneId: "us-et",
-        label: "",
-        time: "",
-        flag: "us",
-        customLabel: "",
-        customTime: "",
-        customZone: "",
-        customEmoji: "",
-        customFlag: "globe",
+        id: "stream-1",
+        title: "Test Stream then VRChat pics!",
+        thumbUrl:
+          "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/438100/capsule_616x353.jpg?t=1762366454",
+        baseTime: "20:30",
+        times: [
+          {
+            id: "slot-1",
+            zoneId: "uk",
+            label: "",
+            time: "",
+            flag: "uk",
+            customLabel: "",
+            customTime: "",
+            customZone: "",
+            customEmoji: "",
+            customFlag: "globe",
+          },
+          {
+            id: "slot-2",
+            zoneId: "us-et",
+            label: "",
+            time: "",
+            flag: "us",
+            customLabel: "",
+            customTime: "",
+            customZone: "",
+            customEmoji: "",
+            customFlag: "globe",
+          },
+        ],
       },
     ],
   },
@@ -313,45 +450,55 @@ const initialDays: StoryDay[] = [
     id: "day-2",
     day: "Wednesday",
     date: "",
-    title: "",
-    thumbUrl: "",
     off: true,
-    baseTime: "20:30",
-    times: [],
+    streams: [
+      {
+        id: "stream-2",
+        title: "",
+        thumbUrl: "",
+        baseTime: "20:30",
+        times: [],
+      },
+    ],
   },
   {
     id: "day-3",
     day: "Thursday",
     date: "Jan 14",
-    title: "Valorant ranked!",
-    thumbUrl:
-      "https://image.jeuxvideo.com/medias-sm/158341/1583411902-8477-jaquette-avant.jpg",
     off: false,
-    baseTime: "20:30",
-    times: [
+    streams: [
       {
-        id: "slot-3",
-        zoneId: "uk",
-        label: "",
-        time: "",
-        flag: "uk",
-        customLabel: "",
-        customTime: "",
-        customZone: "",
-        customEmoji: "",
-        customFlag: "globe",
-      },
-      {
-        id: "slot-4",
-        zoneId: "us-et",
-        label: "",
-        time: "",
-        flag: "us",
-        customLabel: "",
-        customTime: "",
-        customZone: "",
-        customEmoji: "",
-        customFlag: "globe",
+        id: "stream-3",
+        title: "Valorant ranked!",
+        thumbUrl:
+          "https://image.jeuxvideo.com/medias-sm/158341/1583411902-8477-jaquette-avant.jpg",
+        baseTime: "20:30",
+        times: [
+          {
+            id: "slot-3",
+            zoneId: "uk",
+            label: "",
+            time: "",
+            flag: "uk",
+            customLabel: "",
+            customTime: "",
+            customZone: "",
+            customEmoji: "",
+            customFlag: "globe",
+          },
+          {
+            id: "slot-4",
+            zoneId: "us-et",
+            label: "",
+            time: "",
+            flag: "us",
+            customLabel: "",
+            customTime: "",
+            customZone: "",
+            customEmoji: "",
+            customFlag: "globe",
+          },
+        ],
       },
     ],
   },
@@ -359,51 +506,62 @@ const initialDays: StoryDay[] = [
     id: "day-4",
     day: "Friday",
     date: "",
-    title: "",
-    thumbUrl: "",
     off: true,
-    baseTime: "20:30",
-    times: [],
+    streams: [
+      {
+        id: "stream-4",
+        title: "",
+        thumbUrl: "",
+        baseTime: "20:30",
+        times: [],
+      },
+    ],
   },
   {
     id: "day-5",
     day: "Saturday",
     date: "Jan 16",
-    title: "Starting an hardcore world!",
-    thumbUrl:
-      "https://www.nintendo.com/eu/media/images/10_share_images/games_15/nintendo_switch_4/2x1_NSwitch_Minecraft.jpg",
     off: false,
-    baseTime: "20:30",
-    times: [
+    streams: [
       {
-        id: "slot-5",
-        zoneId: "uk",
-        label: "",
-        time: "",
-        flag: "uk",
-        customLabel: "",
-        customTime: "",
-        customZone: "",
-        customEmoji: "",
-        customFlag: "globe",
-      },
-      {
-        id: "slot-6",
-        zoneId: "us-et",
-        label: "",
-        time: "",
-        flag: "us",
-        customLabel: "",
-        customTime: "",
-        customZone: "",
-        customEmoji: "",
-        customFlag: "globe",
+        id: "stream-5",
+        title: "Starting an hardcore world!",
+        thumbUrl:
+          "https://www.nintendo.com/eu/media/images/10_share_images/games_15/nintendo_switch_4/2x1_NSwitch_Minecraft.jpg",
+        baseTime: "20:30",
+        times: [
+          {
+            id: "slot-5",
+            zoneId: "uk",
+            label: "",
+            time: "",
+            flag: "uk",
+            customLabel: "",
+            customTime: "",
+            customZone: "",
+            customEmoji: "",
+            customFlag: "globe",
+          },
+          {
+            id: "slot-6",
+            zoneId: "us-et",
+            label: "",
+            time: "",
+            flag: "us",
+            customLabel: "",
+            customTime: "",
+            customZone: "",
+            customEmoji: "",
+            customFlag: "globe",
+          },
+        ],
       },
     ],
   },
 ];
 
-type TimeSlot = StoryDay["times"][number];
+type Stream = StoryDay["streams"][number];
+type TimeSlot = Stream["times"][number];
 
 type SelectedElement =
   | { type: "day"; id: string }
@@ -423,6 +581,9 @@ export default function SchedulePage() {
   const [days, setDays] = useState<StoryDay[]>(initialDays);
   const [selectedDayId, setSelectedDayId] = useState<string | null>(
     initialDays[0]?.id ?? null,
+  );
+  const [selectedStreamId, setSelectedStreamId] = useState<string | null>(
+    initialDays[0]?.streams[0]?.id ?? null,
   );
   const [selectedElement, setSelectedElement] = useState<SelectedElement>(
     initialDays[0]?.id ? { type: "day", id: initialDays[0].id } : null,
@@ -452,6 +613,11 @@ export default function SchedulePage() {
   const [pendingDeleteDayId, setPendingDeleteDayId] = useState<string | null>(
     null,
   );
+  const [pendingDeleteStream, setPendingDeleteStream] = useState<{
+    dayId: string;
+    streamId: string;
+  } | null>(null);
+  const [pendingClearAll, setPendingClearAll] = useState(false);
   const [localThumbNames, setLocalThumbNames] = useState<Record<string, string>>(
     {},
   );
@@ -461,10 +627,29 @@ export default function SchedulePage() {
     () => days.find((day) => day.id === selectedDayId) ?? null,
     [days, selectedDayId],
   );
+  const selectedStream = useMemo(() => {
+    if (!selectedDay) return null;
+    if (!selectedStreamId) return selectedDay.streams[0] ?? null;
+    return (
+      selectedDay.streams.find((stream) => stream.id === selectedStreamId) ??
+      selectedDay.streams[0] ??
+      null
+    );
+  }, [selectedDay, selectedStreamId]);
   const pendingDeleteDay = useMemo(
     () => days.find((day) => day.id === pendingDeleteDayId) ?? null,
     [days, pendingDeleteDayId],
   );
+  const pendingDeleteStreamInfo = useMemo(() => {
+    if (!pendingDeleteStream) return null;
+    const day = days.find((entry) => entry.id === pendingDeleteStream.dayId);
+    if (!day) return null;
+    const stream = day.streams.find(
+      (entry) => entry.id === pendingDeleteStream.streamId,
+    );
+    if (!stream) return null;
+    return { day, stream };
+  }, [days, pendingDeleteStream]);
   const selectedExport = useMemo(
     () =>
       exportSizes.find((size) => size.id === exportSizeId) ?? exportSizes[0],
@@ -516,23 +701,34 @@ export default function SchedulePage() {
     () =>
       days.map((day) => ({
         ...day,
-        thumbUrl: resolveThumbUrl(day.thumbUrl),
-        times: day.times.map((slot) => {
-          const display = getSlotDisplay(slot, day.baseTime);
-          return {
-            ...slot,
-            label: display.label,
-            time: display.time,
-            flag: display.flag,
-          };
-        }),
+        streams: day.streams.map((stream) => ({
+          ...stream,
+          thumbUrl: resolveThumbUrl(stream.thumbUrl),
+          times: stream.times.map((slot) => {
+            const display = getSlotDisplay(slot, stream.baseTime);
+            return {
+              ...slot,
+              label: display.label,
+              time: display.time,
+              flag: display.flag,
+            };
+          }),
+        })),
       })),
     [days, getSlotDisplay],
   );
 
-  const selectDay = (id: string) => {
+  const selectDay = (id: string, streamId?: string) => {
     setSelectedDayId(id);
     setSelectedElement({ type: "day", id });
+    const day = days.find((entry) => entry.id === id);
+    const hasSelectedStream =
+      selectedStreamId &&
+      day?.streams.some((stream) => stream.id === selectedStreamId);
+    const nextStreamId =
+      streamId ??
+      (hasSelectedStream ? selectedStreamId : day?.streams[0]?.id ?? null);
+    setSelectedStreamId(nextStreamId);
   };
 
   const selectHeader = () => {
@@ -642,15 +838,20 @@ export default function SchedulePage() {
     customFlag: "globe",
   });
 
+  const createStream = (): Stream => ({
+    id: `stream-${idRef.current++}`,
+    title: "New stream",
+    thumbUrl: "",
+    baseTime: "20:30",
+    times: [createTimeSlot()],
+  });
+
   const createDay = (dayName: string): StoryDay => ({
     id: `day-${idRef.current++}`,
     day: dayName,
     date: "",
-    title: "New stream",
-    thumbUrl: "",
     off: false,
-    baseTime: "20:30",
-    times: [createTimeSlot()],
+    streams: [createStream()],
   });
 
   const addDay = (position: "top" | "bottom") => {
@@ -660,7 +861,26 @@ export default function SchedulePage() {
     setDays((prev) =>
       position === "top" ? [newDay, ...prev] : [...prev, newDay],
     );
-    selectDay(newDay.id);
+    selectDay(newDay.id, newDay.streams[0]?.id ?? null);
+  };
+
+  const reorderDays = (
+    dragId: string,
+    targetId: string,
+    position: "before" | "after",
+  ) => {
+    if (dragId === targetId) return;
+    setDays((prev) => {
+      const dragged = prev.find((day) => day.id === dragId);
+      if (!dragged) return prev;
+      const remaining = prev.filter((day) => day.id !== dragId);
+      const targetIndex = remaining.findIndex((day) => day.id === targetId);
+      if (targetIndex === -1) return prev;
+      const insertIndex = position === "after" ? targetIndex + 1 : targetIndex;
+      const next = [...remaining];
+      next.splice(insertIndex, 0, dragged);
+      return next;
+    });
   };
 
   const updateDay = (id: string, patch: Partial<StoryDay>) => {
@@ -669,47 +889,66 @@ export default function SchedulePage() {
     );
   };
 
-  const updateThumbnailUrl = (dayId: string, value: string) => {
-    const existingUrl = objectUrlsRef.current[dayId];
+  const updateStream = (
+    dayId: string,
+    streamId: string,
+    patch: Partial<Stream>,
+  ) => {
+    setDays((prev) =>
+      prev.map((day) => {
+        if (day.id !== dayId) return day;
+        return {
+          ...day,
+          streams: day.streams.map((stream) =>
+            stream.id === streamId ? { ...stream, ...patch } : stream,
+          ),
+        };
+      }),
+    );
+  };
+
+  const updateThumbnailUrl = (dayId: string, streamId: string, value: string) => {
+    const existingUrl = objectUrlsRef.current[streamId];
     if (existingUrl) {
       URL.revokeObjectURL(existingUrl);
-      delete objectUrlsRef.current[dayId];
+      delete objectUrlsRef.current[streamId];
       setLocalThumbNames((prev) => {
         const next = { ...prev };
-        delete next[dayId];
+        delete next[streamId];
         return next;
       });
     }
-    updateDay(dayId, { thumbUrl: value });
+    updateStream(dayId, streamId, { thumbUrl: value });
   };
 
-  const handleThumbnailUpload = (dayId: string, file: File) => {
+  const handleThumbnailUpload = (dayId: string, streamId: string, file: File) => {
     const nextUrl = URL.createObjectURL(file);
-    const existingUrl = objectUrlsRef.current[dayId];
+    const existingUrl = objectUrlsRef.current[streamId];
     if (existingUrl) {
       URL.revokeObjectURL(existingUrl);
     }
-    objectUrlsRef.current[dayId] = nextUrl;
-    setLocalThumbNames((prev) => ({ ...prev, [dayId]: file.name }));
-    updateDay(dayId, { thumbUrl: nextUrl });
+    objectUrlsRef.current[streamId] = nextUrl;
+    setLocalThumbNames((prev) => ({ ...prev, [streamId]: file.name }));
+    updateStream(dayId, streamId, { thumbUrl: nextUrl });
   };
 
-  const clearThumbnail = (dayId: string) => {
-    const existingUrl = objectUrlsRef.current[dayId];
+  const clearThumbnail = (dayId: string, streamId: string) => {
+    const existingUrl = objectUrlsRef.current[streamId];
     if (existingUrl) {
       URL.revokeObjectURL(existingUrl);
-      delete objectUrlsRef.current[dayId];
+      delete objectUrlsRef.current[streamId];
     }
     setLocalThumbNames((prev) => {
       const next = { ...prev };
-      delete next[dayId];
+      delete next[streamId];
       return next;
     });
-    updateDay(dayId, { thumbUrl: "" });
+    updateStream(dayId, streamId, { thumbUrl: "" });
   };
 
   const updateTimeSlot = (
     dayId: string,
+    streamId: string,
     slotId: string,
     patch: Partial<TimeSlot>,
   ) => {
@@ -718,8 +957,15 @@ export default function SchedulePage() {
         if (day.id !== dayId) return day;
         return {
           ...day,
-          times: day.times.map((slot) =>
-            slot.id === slotId ? { ...slot, ...patch } : slot,
+          streams: day.streams.map((stream) =>
+            stream.id === streamId
+              ? {
+                  ...stream,
+                  times: stream.times.map((slot) =>
+                    slot.id === slotId ? { ...slot, ...patch } : slot,
+                  ),
+                }
+              : stream,
           ),
         };
       }),
@@ -727,28 +973,91 @@ export default function SchedulePage() {
   };
 
   const handleEmojiPick =
-    (dayId: string, slotId: string) => (emojiData: EmojiClickData) => {
-      updateTimeSlot(dayId, slotId, { customEmoji: emojiData.emoji });
+    (dayId: string, streamId: string, slotId: string) =>
+    (emojiData: EmojiClickData) => {
+      updateTimeSlot(dayId, streamId, slotId, {
+        customEmoji: emojiData.emoji,
+      });
       setActiveEmojiPickerId(null);
     };
 
-  const addTimeSlot = (dayId: string) => {
+  const addTimeSlot = (dayId: string, streamId: string) => {
     setDays((prev) =>
       prev.map((day) =>
         day.id === dayId
-          ? { ...day, times: [...day.times, createTimeSlot()] }
+          ? {
+              ...day,
+              streams: day.streams.map((stream) =>
+                stream.id === streamId
+                  ? { ...stream, times: [...stream.times, createTimeSlot()] }
+                  : stream,
+              ),
+            }
           : day,
       ),
     );
   };
 
-  const removeTimeSlot = (dayId: string, slotId: string) => {
+  const removeTimeSlot = (dayId: string, streamId: string, slotId: string) => {
     setDays((prev) =>
       prev.map((day) =>
         day.id === dayId
-          ? { ...day, times: day.times.filter((slot) => slot.id !== slotId) }
+          ? {
+              ...day,
+              streams: day.streams.map((stream) =>
+                stream.id === streamId
+                  ? {
+                      ...stream,
+                      times: stream.times.filter((slot) => slot.id !== slotId),
+                    }
+                  : stream,
+              ),
+            }
           : day,
       ),
+    );
+  };
+
+  const addStream = (dayId: string) => {
+    const newStream = createStream();
+    setDays((prev) =>
+      prev.map((day) =>
+        day.id === dayId
+          ? { ...day, streams: [...day.streams, newStream] }
+          : day,
+      ),
+    );
+    setSelectedStreamId(newStream.id);
+  };
+
+  const removeStream = (dayId: string, streamId: string) => {
+    const day = days.find((entry) => entry.id === dayId);
+    if (!day || day.streams.length <= 1) return;
+    const existingUrl = objectUrlsRef.current[streamId];
+    if (existingUrl) {
+      URL.revokeObjectURL(existingUrl);
+      delete objectUrlsRef.current[streamId];
+    }
+    setLocalThumbNames((prev) => {
+      if (!prev[streamId]) return prev;
+      const next = { ...prev };
+      delete next[streamId];
+      return next;
+    });
+    setDays((prev) =>
+      prev.map((entry) => {
+        if (entry.id !== dayId) return entry;
+        const nextStreams = entry.streams.filter(
+          (stream) => stream.id !== streamId,
+        );
+        if (selectedStreamId === streamId) {
+          setSelectedStreamId(nextStreams[0]?.id ?? null);
+        }
+        return {
+          ...entry,
+          streams: nextStreams,
+        };
+      }),
     );
   };
 
@@ -756,29 +1065,78 @@ export default function SchedulePage() {
     setPendingDeleteDayId(dayId);
   };
 
+  const requestDeleteStream = (dayId: string, streamId: string) => {
+    setPendingDeleteStream({ dayId, streamId });
+  };
+
   const removeDay = (dayId: string) => {
-    const existingUrl = objectUrlsRef.current[dayId];
-    if (existingUrl) {
-      URL.revokeObjectURL(existingUrl);
-      delete objectUrlsRef.current[dayId];
+    const day = days.find((entry) => entry.id === dayId);
+    if (day) {
+      day.streams.forEach((stream) => {
+        const existingUrl = objectUrlsRef.current[stream.id];
+        if (existingUrl) {
+          URL.revokeObjectURL(existingUrl);
+          delete objectUrlsRef.current[stream.id];
+        }
+      });
+      setLocalThumbNames((prev) => {
+        const next = { ...prev };
+        day.streams.forEach((stream) => {
+          delete next[stream.id];
+        });
+        return next;
+      });
     }
-    setLocalThumbNames((prev) => {
-      if (!prev[dayId]) return prev;
-      const next = { ...prev };
-      delete next[dayId];
-      return next;
-    });
     setDays((prev) => {
       const next = prev.filter((day) => day.id !== dayId);
       if (selectedDayId === dayId) {
         const nextId = next[0]?.id ?? null;
+        const nextStreamId = next[0]?.streams[0]?.id ?? null;
         setSelectedDayId(nextId);
+        setSelectedStreamId(nextStreamId);
         if (selectedElement?.type === "day") {
           setSelectedElement(nextId ? { type: "day", id: nextId } : null);
         }
       }
       return next;
     });
+  };
+
+  const confirmDeleteStream = () => {
+    if (!pendingDeleteStream) return;
+    removeStream(pendingDeleteStream.dayId, pendingDeleteStream.streamId);
+    setPendingDeleteStream(null);
+  };
+
+  const cancelDeleteStream = () => {
+    setPendingDeleteStream(null);
+  };
+
+  const requestClearAll = () => {
+    setPendingDeleteDayId(null);
+    setPendingDeleteStream(null);
+    setPendingClearAll(true);
+  };
+
+  const confirmClearAll = () => {
+    Object.values(objectUrlsRef.current).forEach((url) =>
+      URL.revokeObjectURL(url),
+    );
+    objectUrlsRef.current = {};
+    setLocalThumbNames({});
+    setDays([]);
+    setSelectedDayId(null);
+    setSelectedStreamId(null);
+    setPendingDeleteStream(null);
+    if (selectedElement?.type === "day") {
+      setSelectedElement(null);
+    }
+    setPendingDeleteDayId(null);
+    setPendingClearAll(false);
+  };
+
+  const cancelClearAll = () => {
+    setPendingClearAll(false);
   };
 
   const confirmDeleteDay = () => {
@@ -1067,6 +1425,23 @@ export default function SchedulePage() {
                   </div>
                 </div>
               </div>
+
+              <div className="rounded-[28px] border border-red-200 bg-white/85 p-6 shadow-[0_20px_50px_rgba(20,27,42,0.08)]">
+                <h2 className="font-display text-xl text-slate-900">
+                  Danger zone
+                </h2>
+                <p className="mt-2 text-sm text-slate-600">
+                  Remove every day and time slot from the schedule.
+                </p>
+                <button
+                  type="button"
+                  onClick={requestClearAll}
+                  disabled={days.length === 0}
+                  className="mt-4 w-full rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition hover:border-red-300 hover:text-red-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Remove all days
+                </button>
+              </div>
               </aside>
             ) : null}
 
@@ -1119,6 +1494,7 @@ export default function SchedulePage() {
                   }
                   onAddDay={addDay}
                   onDeleteDay={requestDeleteDay}
+                  onReorderDay={reorderDays}
                   canAddDay={canAddDay}
                   showAddControls={!isPreviewMode && !isExportingView}
                   isExporting={isExportingView}
@@ -1194,7 +1570,7 @@ export default function SchedulePage() {
                         type="checkbox"
                         className="h-4 w-4"
                       />
-                      <span className="text-sm">Day off (no stream)</span>
+                      <span className="text-sm">Day off (no streams)</span>
                     </label>
 
                     <div className="space-y-4">
@@ -1206,15 +1582,87 @@ export default function SchedulePage() {
 
                       {!selectedDay.off ? (
                         <div className="space-y-4">
-                          <label className="block">
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                                Streams
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => addStream(selectedDay.id)}
+                                  className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                                >
+                                  Add stream
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    selectedStream
+                                      ? requestDeleteStream(
+                                          selectedDay.id,
+                                          selectedStream.id,
+                                        )
+                                      : null
+                                  }
+                                  disabled={
+                                    !selectedStream ||
+                                    selectedDay.streams.length <= 1
+                                  }
+                                  className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700 transition hover:border-red-300 hover:text-red-800 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  Remove stream
+                                </button>
+                              </div>
+                            </div>
+
+                            {selectedDay.streams.length === 0 ? (
+                              <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-3 py-3 text-xs text-slate-500">
+                                No streams yet.
+                              </div>
+                            ) : (
+                              <div className="flex flex-wrap gap-2">
+                                {selectedDay.streams.map((stream, index) => {
+                                  const streamLabel =
+                                    stream.title.trim() || `Stream ${index + 1}`;
+                                  const isActive =
+                                    selectedStream?.id === stream.id;
+                                  return (
+                                    <button
+                                      key={stream.id}
+                                      type="button"
+                                      onClick={() =>
+                                        setSelectedStreamId(stream.id)
+                                      }
+                                      aria-pressed={isActive}
+                                      className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                                        isActive
+                                          ? "border-[var(--accent)] text-slate-900"
+                                          : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                                      }`}
+                                    >
+                                      {streamLabel}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                          {!selectedStream ? (
+                            <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-3 py-3 text-xs text-slate-500">
+                              Select a stream to edit its details.
+                            </div>
+                          ) : (
+                            <div className="space-y-4">
+                              <label className="block">
                             <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
                               Stream title
                             </span>
                             <input
                               className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                              value={selectedDay.title}
+                              value={selectedStream.title}
                               onChange={(event) =>
-                                updateDay(selectedDay.id, {
+                                updateStream(selectedDay.id, selectedStream.id, {
                                   title: event.target.value,
                                 })
                               }
@@ -1229,10 +1677,11 @@ export default function SchedulePage() {
                             </span>
                             <input
                               className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                              value={selectedDay.thumbUrl}
+                              value={selectedStream.thumbUrl}
                               onChange={(event) =>
                                 updateThumbnailUrl(
                                   selectedDay.id,
+                                  selectedStream.id,
                                   event.target.value,
                                 )
                               }
@@ -1252,20 +1701,26 @@ export default function SchedulePage() {
                               onChange={(event) => {
                                 const file = event.target.files?.[0];
                                 if (file) {
-                                  handleThumbnailUpload(selectedDay.id, file);
+                                  handleThumbnailUpload(
+                                    selectedDay.id,
+                                    selectedStream.id,
+                                    file,
+                                  );
                                 }
                                 event.currentTarget.value = "";
                               }}
                             />
-                            {localThumbNames[selectedDay.id] ? (
+                            {localThumbNames[selectedStream.id] ? (
                               <p className="mt-2 text-xs text-slate-500">
-                                Local file: {localThumbNames[selectedDay.id]}
+                                Local file: {localThumbNames[selectedStream.id]}
                               </p>
                             ) : null}
                             <button
                               type="button"
-                              onClick={() => clearThumbnail(selectedDay.id)}
-                              disabled={!selectedDay.thumbUrl}
+                              onClick={() =>
+                                clearThumbnail(selectedDay.id, selectedStream.id)
+                              }
+                              disabled={!selectedStream.thumbUrl}
                               className="mt-3 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               Clear thumbnail
@@ -1279,9 +1734,9 @@ export default function SchedulePage() {
                             <div className="mt-2 flex flex-wrap items-center gap-2">
                               <input
                                 className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                                value={selectedDay.baseTime}
+                                value={selectedStream.baseTime}
                                 onChange={(event) =>
-                                  updateDay(selectedDay.id, {
+                                  updateStream(selectedDay.id, selectedStream.id, {
                                     baseTime: event.target.value,
                                   })
                                 }
@@ -1300,22 +1755,24 @@ export default function SchedulePage() {
                               </span>
                               <button
                                 type="button"
-                                onClick={() => addTimeSlot(selectedDay.id)}
+                                onClick={() =>
+                                  addTimeSlot(selectedDay.id, selectedStream.id)
+                                }
                                 className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
                               >
                                 Add slot
                               </button>
                             </div>
 
-                            {selectedDay.times.length === 0 ? (
+                            {selectedStream.times.length === 0 ? (
                               <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-3 py-3 text-xs text-slate-500">
                                 No time slots yet.
                               </div>
                             ) : (
-                              selectedDay.times.map((slot) => {
+                              selectedStream.times.map((slot) => {
                                 const display = getSlotDisplay(
                                   slot,
-                                  selectedDay.baseTime,
+                                  selectedStream.baseTime,
                                 );
                                 const isCustom = slot.zoneId === "custom";
                                 return (
@@ -1327,14 +1784,15 @@ export default function SchedulePage() {
                                       <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
                                         Time zone
                                       </span>
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          removeTimeSlot(
-                                            selectedDay.id,
-                                            slot.id,
-                                          )
-                                        }
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              removeTimeSlot(
+                                                selectedDay.id,
+                                                selectedStream.id,
+                                                slot.id,
+                                              )
+                                            }
                                         className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
                                       >
                                         Remove
@@ -1349,6 +1807,7 @@ export default function SchedulePage() {
                                           onClick={() =>
                                             updateTimeSlot(
                                               selectedDay.id,
+                                              selectedStream.id,
                                               slot.id,
                                               option.id === "custom"
                                                 ? {
@@ -1375,7 +1834,7 @@ export default function SchedulePage() {
                                           }`}
                                         >
                                           <span className="flex items-center gap-2">
-                                            <span className="h-4 w-6 overflow-hidden rounded-[3px] shadow-[0_0_0_1px_rgba(15,23,42,0.12)]">
+                                            <span className="h-4 w-6 shrink-0 overflow-hidden rounded-[3px] shadow-[0_0_0_1px_rgba(15,23,42,0.12)] [&_svg]:block [&_svg]:h-full [&_svg]:w-full">
                                               <FlagIcon flag={option.flag} />
                                             </span>
                                             <span>{option.label}</span>
@@ -1422,6 +1881,7 @@ export default function SchedulePage() {
                                                 <EmojiPicker
                                                   onEmojiClick={handleEmojiPick(
                                                     selectedDay.id,
+                                                    selectedStream.id,
                                                     slot.id,
                                                   )}
                                                 />
@@ -1440,6 +1900,7 @@ export default function SchedulePage() {
                                             onChange={(event) =>
                                               updateTimeSlot(
                                                 selectedDay.id,
+                                                selectedStream.id,
                                                 slot.id,
                                                 {
                                                   customLabel: event.target.value,
@@ -1462,6 +1923,7 @@ export default function SchedulePage() {
                                             onChange={(event) =>
                                               updateTimeSlot(
                                                 selectedDay.id,
+                                                selectedStream.id,
                                                 slot.id,
                                                 { customZone: event.target.value },
                                               )
@@ -1481,6 +1943,7 @@ export default function SchedulePage() {
                                             onChange={(event) =>
                                               updateTimeSlot(
                                                 selectedDay.id,
+                                                selectedStream.id,
                                                 slot.id,
                                                 {
                                                   customTime: event.target.value,
@@ -1499,6 +1962,21 @@ export default function SchedulePage() {
                               })
                             )}
                           </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              requestDeleteStream(
+                                selectedDay.id,
+                                selectedStream.id,
+                              )
+                            }
+                            disabled={selectedDay.streams.length <= 1}
+                            className="w-full rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition hover:border-red-300 hover:text-red-800 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Delete stream
+                          </button>
+                        </div>
+                      )}
                         </div>
                       ) : null}
 
@@ -1718,7 +2196,7 @@ export default function SchedulePage() {
                   Remove {pendingDeleteDay?.day || "this day"}?
                 </h3>
                 <p className="mt-2 text-sm text-slate-600">
-                  This will remove the stream and its time slots from the
+                  This will remove the streams and their time slots from the
                   schedule.
                 </p>
                 <div className="mt-5 flex flex-wrap gap-3">
@@ -1735,6 +2213,84 @@ export default function SchedulePage() {
                     className="flex-1 rounded-full bg-red-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-600"
                   >
                     Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+          {pendingDeleteStream ? (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4"
+              onClick={cancelDeleteStream}
+            >
+              <div
+                className="w-full max-w-sm rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_30px_80px_rgba(20,27,42,0.3)]"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
+                  Delete stream
+                </p>
+                <h3 className="mt-2 font-display text-2xl text-slate-900">
+                  Remove{" "}
+                  {pendingDeleteStreamInfo?.stream.title.trim() || "this stream"}
+                  ?
+                </h3>
+                <p className="mt-2 text-sm text-slate-600">
+                  This will remove the stream and its time slots from{" "}
+                  {pendingDeleteStreamInfo?.day.day || "this day"}.
+                </p>
+                <div className="mt-5 flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={cancelDeleteStream}
+                    className="flex-1 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmDeleteStream}
+                    className="flex-1 rounded-full bg-red-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-600"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+          {pendingClearAll ? (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4"
+              onClick={cancelClearAll}
+            >
+              <div
+                className="w-full max-w-sm rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_30px_80px_rgba(20,27,42,0.3)]"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
+                  Clear schedule
+                </p>
+                <h3 className="mt-2 font-display text-2xl text-slate-900">
+                  Remove all days?
+                </h3>
+                <p className="mt-2 text-sm text-slate-600">
+                  This will delete every day, stream, and time slot from the
+                  schedule.
+                </p>
+                <div className="mt-5 flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={cancelClearAll}
+                    className="flex-1 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmClearAll}
+                    className="flex-1 rounded-full bg-red-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-600"
+                  >
+                    Remove all
                   </button>
                 </div>
               </div>
