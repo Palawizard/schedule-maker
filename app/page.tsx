@@ -59,18 +59,18 @@ export default function Home() {
   return (
     <div className="page-shell min-h-screen">
       <div className="relative overflow-hidden">
-        <div className="hero-glow pointer-events-none absolute -top-40 right-0 h-[420px] w-[420px] opacity-80 blur-3xl" />
-        <div className="pointer-events-none absolute -left-32 top-40 h-[280px] w-[280px] rounded-full bg-[var(--sea)]/15 blur-3xl" />
+        <div className="hero-glow pointer-events-none absolute -top-40 right-0 h-105 w-105 opacity-80 blur-3xl" />
+        <div className="pointer-events-none absolute -left-32 top-40 h-70 w-70 rounded-full bg-(--sea)/15 blur-3xl" />
         <header className="relative z-10 mx-auto w-full max-w-6xl px-6 py-6">
           <div className="flex items-center justify-between rounded-[26px] border border-slate-200 bg-white px-4 py-3 shadow-[0_18px_40px_rgba(20,27,42,0.12)]">
             <Link className="flex items-center gap-3 text-lg font-semibold" href="/">
-              <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[var(--accent)] text-white">
+              <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-(--accent) text-white">
                 P
               </span>
-              Pala's Stream Schedule Maker
+              Pala&apos;s Stream Schedule Maker
             </Link>
             <Link
-              className="rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(242,107,58,0.3)] transition hover:bg-[var(--accent-strong)]"
+              className="rounded-full bg-(--accent) px-4 py-2 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(242,107,58,0.3)] transition hover:bg-(--accent-strong)"
               href="/schedule"
             >
               Launch studio
@@ -93,17 +93,17 @@ export default function Home() {
               </p>
               <div className="flex flex-wrap gap-3">
                 <Link
-                  className="rounded-full bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-white shadow-[0_16px_40px_rgba(242,107,58,0.25)] transition hover:-translate-y-0.5 hover:bg-[var(--accent-strong)]"
+                  className="rounded-full bg-(--accent) px-5 py-3 text-sm font-semibold text-white shadow-[0_16px_40px_rgba(242,107,58,0.25)] transition hover:-translate-y-0.5 hover:bg-(--accent-strong)"
                   href="/schedule"
                 >
                   Create my schedule
                 </Link>
-                <a
+                <Link
                   className="rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
-                  href="#features"
+                  href="/#features"
                 >
                   See features
-                </a>
+                </Link>
               </div>
               <div className="flex flex-wrap gap-6 text-sm text-slate-500">
                 <div>
@@ -122,8 +122,8 @@ export default function Home() {
             </div>
 
             <div className="relative animate-float-in">
-              <div className="absolute -left-10 -top-10 h-32 w-32 rounded-full bg-[var(--sea)]/20 blur-2xl" />
-              <div className="rounded-[32px] border border-slate-200 bg-white/85 p-6 shadow-[0_30px_80px_rgba(20,27,42,0.18)] backdrop-blur">
+              <div className="absolute -left-10 -top-10 h-32 w-32 rounded-full bg-(--sea)/20 blur-2xl" />
+              <div className="rounded-4xl border border-slate-200 bg-white/85 p-6 shadow-[0_30px_80px_rgba(20,27,42,0.18)] backdrop-blur">
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <p className="text-xs uppercase tracking-[0.22em] text-slate-400">
@@ -134,20 +134,20 @@ export default function Home() {
                     </p>
                   </div>
                   <div className="flex items-center rounded-full border border-slate-200 bg-white p-1 text-[11px] font-semibold">
-                    <span className="rounded-full bg-[var(--accent)] px-3 py-1 text-white">
+                    <span className="rounded-full bg-(--accent) px-3 py-1 text-white">
                       Edit
                     </span>
                     <span className="px-3 py-1 text-slate-500">Preview</span>
                   </div>
                 </div>
                 <div className="mt-5 grid gap-3">
-                  <div className="rounded-2xl border border-slate-200 bg-[var(--paper)] px-4 py-3 text-sm text-slate-700">
+                  <div className="rounded-2xl border border-slate-200 bg-(--paper) px-4 py-3 text-sm text-slate-700">
                     Schedule name: <span className="font-semibold">Week 24</span>
                   </div>
-                  <div className="rounded-2xl border border-slate-200 bg-[var(--paper)] px-4 py-3 text-sm text-slate-700">
+                  <div className="rounded-2xl border border-slate-200 bg-(--paper) px-4 py-3 text-sm text-slate-700">
                     Time zone: <span className="font-semibold">Europe/Paris</span>
                   </div>
-                  <div className="rounded-2xl border border-slate-200 bg-[var(--paper)] px-4 py-3 text-sm text-slate-700">
+                  <div className="rounded-2xl border border-slate-200 bg-(--paper) px-4 py-3 text-sm text-slate-700">
                     Export size: <span className="font-semibold">YouTube post</span>
                   </div>
                 </div>
@@ -189,7 +189,7 @@ export default function Home() {
             ))}
           </section>
 
-          <section className="mt-16 rounded-[32px] border border-slate-200 bg-[var(--paper)] px-6 py-10 shadow-[0_30px_70px_rgba(20,27,42,0.12)] md:px-10">
+          <section className="mt-16 rounded-4xl border border-slate-200 bg-(--paper) px-6 py-10 shadow-[0_30px_70px_rgba(20,27,42,0.12)] md:px-10">
             <div className="grid items-center gap-8 md:grid-cols-[1.2fr_0.8fr]">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">

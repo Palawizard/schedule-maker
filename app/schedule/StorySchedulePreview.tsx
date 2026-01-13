@@ -97,12 +97,16 @@ type StorySchedulePreviewProps = {
   days: StoryDay[];
   selectedDayId: string | null;
   selectedTarget: "day" | "header" | "footer" | null;
-  onSelectDay: (id: string) => void;
-  onSelectHeader: () => void;
-  onSelectFooter: () => void;
-  onAddDay: (position: "top" | "bottom") => void;
-  onDeleteDay: (id: string) => void;
-  onReorderDay: (dragId: string, targetId: string, position: "before" | "after") => void;
+  onSelectDayAction: (id: string) => void;
+  onSelectHeaderAction: () => void;
+  onSelectFooterAction: () => void;
+  onAddDayAction: (position: "top" | "bottom") => void;
+  onDeleteDayAction: (id: string) => void;
+  onReorderDayAction: (
+    dragId: string,
+    targetId: string,
+    position: "before" | "after",
+  ) => void;
   canAddDay: boolean;
   showAddControls: boolean;
   isExporting: boolean;
@@ -312,12 +316,12 @@ export default function StorySchedulePreview({
   days,
   selectedDayId,
   selectedTarget,
-  onSelectDay,
-  onSelectHeader,
-  onSelectFooter,
-  onAddDay,
-  onDeleteDay,
-  onReorderDay,
+  onSelectDayAction,
+  onSelectHeaderAction,
+  onSelectFooterAction,
+  onAddDayAction,
+  onDeleteDayAction,
+  onReorderDayAction,
   canAddDay,
   showAddControls,
   isExporting,
@@ -350,7 +354,7 @@ export default function StorySchedulePreview({
     setDraggingDayId(dayId);
     setDragOverDayId(null);
     setDragOverPosition(null);
-    onSelectDay(dayId);
+    onSelectDayAction(dayId);
   };
 
   const handleDragOver = (event: DragEvent, dayId: string, axis: "x" | "y") => {
@@ -401,7 +405,7 @@ export default function StorySchedulePreview({
         : rect.top + rect.height / 2;
     const cursor = axis === "x" ? event.clientX : event.clientY;
     const position = cursor < midpoint ? "before" : "after";
-    onReorderDay(dragId, dayId, position);
+    onReorderDayAction(dragId, dayId, position);
     setDragOverDayId(null);
     setDragOverPosition(null);
     setDraggingDayId(null);
@@ -435,7 +439,7 @@ export default function StorySchedulePreview({
     return () => observer.disconnect();
   }, [canvasWidth, canvasHeight]);
 
-  const addDayButtonClass = `flex w-full items-center justify-center gap-3 rounded-[24px] border-2 border-dashed font-semibold uppercase tracking-[0.24em] transition ${
+  const addDayButtonClass = `flex w-full items-center justify-center gap-3 rounded-3xl border-2 border-dashed font-semibold uppercase tracking-[0.24em] transition ${
     canAddDay
       ? "border-white/30 bg-white/5 text-white/80 hover:border-white/60 hover:text-white"
       : "cursor-not-allowed border-white/15 bg-white/5 text-white/40"
@@ -652,7 +656,7 @@ export default function StorySchedulePreview({
   ) => (
     <button
       type="button"
-      onClick={() => onAddDay(position)}
+      onClick={() => onAddDayAction(position)}
       disabled={!canAddDay}
       className={addDayButtonClass}
       style={{
@@ -675,7 +679,7 @@ export default function StorySchedulePreview({
   ) => (
     <button
       type="button"
-      onClick={() => onAddDay(position)}
+      onClick={() => onAddDayAction(position)}
       disabled={!canAddDay}
       className={addDayButtonClass}
       style={{
@@ -697,7 +701,7 @@ export default function StorySchedulePreview({
       <div className="flex w-full justify-center">
         <div
           ref={wrapperRef}
-          className="relative w-full max-w-[980px]"
+          className="relative w-full max-w-245"
           style={{ aspectRatio: `${canvasWidth} / ${canvasHeight}` }}
         >
           <div
@@ -727,9 +731,9 @@ export default function StorySchedulePreview({
                   <div className="flex items-end" style={{ height: landscapeHeaderHeight }}>
                     <button
                       type="button"
-                      onClick={onSelectHeader}
+                      onClick={onSelectHeaderAction}
                       aria-pressed={isHeaderSelected}
-                      className={`w-full rounded-[20px] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${
+                      className={`w-full rounded-[20px] transition focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${
                         isHeaderSelected
                           ? "ring-2 ring-cyan-300/80 bg-white/5"
                           : "ring-1 ring-transparent"
@@ -740,7 +744,7 @@ export default function StorySchedulePreview({
                       }}
                     >
                       <span
-                        className="font-black leading-[1.05] tracking-[-0.02em] break-words"
+                        className="font-black leading-[1.05] tracking-[-0.02em] wrap-break-word"
                         style={{
                           fontSize: landscapeHeaderFontSize,
                           lineHeight: landscapeHeaderLineHeight,
@@ -785,7 +789,7 @@ export default function StorySchedulePreview({
                       {showAddControls ? (
                         <button
                           type="button"
-                          onClick={() => onAddDay("top")}
+                          onClick={() => onAddDayAction("top")}
                           disabled={!canAddDay}
                           className={addDayButtonClass}
                           style={{
@@ -888,7 +892,7 @@ export default function StorySchedulePreview({
                                 ) : null}
                                 <button
                                   type="button"
-                                  onClick={() => onSelectDay(day.id)}
+                                  onClick={() => onSelectDayAction(day.id)}
                                   draggable={canEdit}
                                   onDragStart={(event) =>
                                     handleDragStart(event, day.id)
@@ -900,7 +904,7 @@ export default function StorySchedulePreview({
                                   onDrop={(event) => handleDrop(event, day.id, "x")}
                                   onDragEnd={handleDragEnd}
                                   aria-pressed={isSelected}
-                                  className={`relative flex min-h-0 w-full flex-1 flex-col border text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${
+                                  className={`relative flex min-h-0 w-full flex-1 flex-col border text-left transition focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${
                                     isSelected
                                       ? "border-cyan-300/80"
                                       : "border-white/20"
@@ -945,7 +949,7 @@ export default function StorySchedulePreview({
                                       }}
                                     >
                                       <div
-                                        className="inline-flex items-center rounded-full border border-white/20 bg-black/60 font-black uppercase tracking-[0.1em] text-white/95"
+                                        className="inline-flex items-center rounded-full border border-white/20 bg-black/60 font-black uppercase tracking-widest text-white/95"
                                         style={{
                                           gap: tileUnit(8),
                                           padding: `${tileUnit(6)}px ${tileUnit(9)}px`,
@@ -1003,7 +1007,7 @@ export default function StorySchedulePreview({
                                     >
                                       {primaryStream.times.length === 0 ? (
                                         <div
-                                          className="w-full rounded-[16px] border border-dashed border-white/20 bg-white/5 font-semibold uppercase tracking-[0.14em] text-white/70"
+                                          className="w-full rounded-2xl border border-dashed border-white/20 bg-white/5 font-semibold uppercase tracking-[0.14em] text-white/70"
                                           style={{
                                             minHeight:
                                               LANDSCAPE_PILL_MIN_HEIGHT *
@@ -1031,7 +1035,7 @@ export default function StorySchedulePreview({
                                           return (
                                             <div
                                               key={slot.id}
-                                              className="flex w-full items-center rounded-[16px] border border-white/20 bg-white/20 text-white/95"
+                                              className="flex w-full items-center rounded-2xl border border-white/20 bg-white/20 text-white/95"
                                               style={{
                                                 minHeight:
                                                   LANDSCAPE_PILL_MIN_HEIGHT *
@@ -1076,7 +1080,7 @@ export default function StorySchedulePreview({
                                                   )}
                                                 </span>
                                                 <span
-                                                  className="min-w-0 truncate font-black uppercase tracking-[0.1em] text-white/80"
+                                                  className="min-w-0 truncate font-black uppercase tracking-widest text-white/80"
                                                   style={{
                                                     fontSize: Math.max(
                                                       9,
@@ -1120,7 +1124,7 @@ export default function StorySchedulePreview({
                                     aria-label="Delete day"
                                     onClick={(event) => {
                                       event.stopPropagation();
-                                      onDeleteDay(day.id);
+                                      onDeleteDayAction(day.id);
                                     }}
                                     className="absolute flex items-center justify-center rounded-full bg-red-500 text-white shadow-[0_6px_18px_rgba(0,0,0,0.35)] transition hover:bg-red-600"
                                     style={{
@@ -1187,7 +1191,7 @@ export default function StorySchedulePreview({
                               ) : null}
                               <button
                                 type="button"
-                                onClick={() => onSelectDay(day.id)}
+                                onClick={() => onSelectDayAction(day.id)}
                                 draggable={canEdit}
                                 onDragStart={(event) => handleDragStart(event, day.id)}
                                 onDragOver={(event) =>
@@ -1197,7 +1201,7 @@ export default function StorySchedulePreview({
                                 onDrop={(event) => handleDrop(event, day.id, "x")}
                                 onDragEnd={handleDragEnd}
                                 aria-pressed={isSelected}
-                                className={`relative flex min-h-0 w-full flex-1 flex-col border text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${
+                                className={`relative flex min-h-0 w-full flex-1 flex-col border text-left transition focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${
                                   isSelected
                                     ? "border-cyan-300/80"
                                     : "border-white/20"
@@ -1245,7 +1249,7 @@ export default function StorySchedulePreview({
                                     }}
                                   >
                                     <div
-                                      className="inline-flex items-center rounded-full border border-white/20 bg-black/60 font-black uppercase tracking-[0.1em] text-white/95"
+                                      className="inline-flex items-center rounded-full border border-white/20 bg-black/60 font-black uppercase tracking-widest text-white/95"
                                       style={{
                                         gap: tileUnit(8),
                                         padding: `${tileUnit(6)}px ${tileUnit(9)}px`,
@@ -1289,7 +1293,7 @@ export default function StorySchedulePreview({
                                 >
                                   {day.streams.length === 0 ? (
                                     <div
-                                      className="w-full rounded-[16px] border border-dashed border-white/20 bg-white/5 font-semibold uppercase tracking-[0.14em] text-white/70"
+                                      className="w-full rounded-2xl border border-dashed border-white/20 bg-white/5 font-semibold uppercase tracking-[0.14em] text-white/70"
                                       style={{
                                         minHeight:
                                           LANDSCAPE_PILL_MIN_HEIGHT * tileScale,
@@ -1327,7 +1331,7 @@ export default function StorySchedulePreview({
                                       return (
                                         <div
                                           key={stream.id}
-                                          className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[16px] border border-white/15 bg-white/10 text-white/95"
+                                          className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/15 bg-white/10 text-white/95"
                                           style={{
                                             gap: streamUnit(6),
                                             padding: `${streamUnit(8)}px ${streamUnit(
@@ -1436,7 +1440,7 @@ export default function StorySchedulePreview({
                                                         )}
                                                       </span>
                                                       <span
-                                                        className="min-w-0 truncate font-black uppercase tracking-[0.1em] text-white/80"
+                                                        className="min-w-0 truncate font-black uppercase tracking-widest text-white/80"
                                                         style={{
                                                           fontSize: Math.max(
                                                             9,
@@ -1486,7 +1490,7 @@ export default function StorySchedulePreview({
                                     aria-label="Delete day"
                                     onClick={(event) => {
                                       event.stopPropagation();
-                                      onDeleteDay(day.id);
+                                      onDeleteDayAction(day.id);
                                     }}
                                     className="absolute flex items-center justify-center rounded-full bg-red-500 text-white shadow-[0_6px_18px_rgba(0,0,0,0.35)] transition hover:bg-red-600"
                                     style={{
@@ -1509,7 +1513,7 @@ export default function StorySchedulePreview({
                       {showAddControls ? (
                         <button
                           type="button"
-                          onClick={() => onAddDay("bottom")}
+                          onClick={() => onAddDayAction("bottom")}
                           disabled={!canAddDay}
                           className={addDayButtonClass}
                           style={{
@@ -1538,9 +1542,9 @@ export default function StorySchedulePreview({
                   <footer className="flex justify-center">
                     <button
                       type="button"
-                      onClick={onSelectFooter}
+                      onClick={onSelectFooterAction}
                       aria-pressed={isFooterSelected}
-                      className={`inline-flex items-center rounded-full font-black leading-none tracking-[0.02em] text-white/95 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${footerClass}`}
+                      className={`inline-flex items-center rounded-full font-black leading-none tracking-[0.02em] text-white/95 transition focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${footerClass}`}
                       style={{
                         minHeight: landscapeFooterHeight,
                         padding: `${landscapeFooterMetrics.paddingY}px ${landscapeFooterMetrics.paddingX}px`,
@@ -1575,7 +1579,7 @@ export default function StorySchedulePreview({
     <div className="flex w-full justify-center">
       <div
         ref={wrapperRef}
-        className="relative w-full max-w-[520px]"
+        className="relative w-full max-w-130"
         style={{ aspectRatio: `${canvasWidth} / ${canvasHeight}` }}
       >
         <div
@@ -1611,9 +1615,9 @@ export default function StorySchedulePreview({
                 >
                   <button
                     type="button"
-                    onClick={onSelectHeader}
+                    onClick={onSelectHeaderAction}
                     aria-pressed={isHeaderSelected}
-                    className={`w-full rounded-[24px] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${
+                    className={`w-full rounded-3xl transition focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${
                       isHeaderSelected
                         ? "ring-2 ring-cyan-300/80 bg-white/5"
                         : "ring-1 ring-transparent"
@@ -1624,7 +1628,7 @@ export default function StorySchedulePreview({
                     }}
                   >
                     <span
-                      className="text-[56px] font-black leading-[1.05] tracking-[-0.02em] break-words"
+                      className="text-[56px] font-black leading-[1.05] tracking-[-0.02em] wrap-break-word"
                       style={{
                         fontSize: headerFontSize,
                         lineHeight: headerLineHeight,
@@ -1710,7 +1714,7 @@ export default function StorySchedulePreview({
                           ) : null}
                           <button
                             type="button"
-                            onClick={() => onSelectDay(day.id)}
+                            onClick={() => onSelectDayAction(day.id)}
                             draggable={canEdit}
                             onDragStart={(event) => handleDragStart(event, day.id)}
                             onDragOver={(event) =>
@@ -1720,7 +1724,7 @@ export default function StorySchedulePreview({
                             onDrop={(event) => handleDrop(event, day.id, "y")}
                             onDragEnd={handleDragEnd}
                             aria-pressed={isSelected}
-                            className={`grid h-[140px] w-full grid-cols-[220px_1fr] gap-[18px] rounded-[28px] border-2 border-dashed border-white/30 bg-white/5 p-4 text-left backdrop-blur-[10px] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${
+                            className={`grid h-35 w-full grid-cols-[220px_1fr] gap-4.5 rounded-[28px] border-2 border-dashed border-white/30 bg-white/5 p-4 text-left backdrop-blur-[10px] transition focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${
                               canEdit ? "cursor-grab active:cursor-grabbing" : ""
                             }`}
                             style={{
@@ -1739,7 +1743,7 @@ export default function StorySchedulePreview({
                             }}
                           >
                             <div
-                              className="relative aspect-[16/9] w-full max-h-full self-center overflow-hidden rounded-[18px]"
+                              className="relative aspect-video w-full max-h-full self-center overflow-hidden rounded-[18px]"
                               style={{
                                 backgroundImage:
                                   "linear-gradient(135deg, rgba(124,58,237,0.1), rgba(34,211,238,0.06))",
@@ -1773,7 +1777,7 @@ export default function StorySchedulePreview({
                               aria-label="Delete day"
                               onClick={(event) => {
                                 event.stopPropagation();
-                                onDeleteDay(day.id);
+                                onDeleteDayAction(day.id);
                               }}
                               className="absolute flex items-center justify-center rounded-full bg-red-500 text-white shadow-[0_6px_18px_rgba(0,0,0,0.35)] transition hover:bg-red-600"
                               style={{
@@ -1859,7 +1863,7 @@ export default function StorySchedulePreview({
                           ) : null}
                           <button
                             type="button"
-                            onClick={() => onSelectDay(day.id)}
+                            onClick={() => onSelectDayAction(day.id)}
                             draggable={canEdit}
                             onDragStart={(event) => handleDragStart(event, day.id)}
                             onDragOver={(event) =>
@@ -1869,7 +1873,7 @@ export default function StorySchedulePreview({
                             onDrop={(event) => handleDrop(event, day.id, "y")}
                             onDragEnd={handleDragEnd}
                             aria-pressed={isSelected}
-                            className={`grid h-[250px] w-full grid-cols-[260px_1fr] gap-5 rounded-[28px] bg-white/10 p-5 text-left backdrop-blur-[10px] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${
+                            className={`grid h-62.5 w-full grid-cols-[260px_1fr] gap-5 rounded-[28px] bg-white/10 p-5 text-left backdrop-blur-[10px] transition focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${
                               canEdit ? "cursor-grab active:cursor-grabbing" : ""
                             }`}
                             style={{
@@ -1888,7 +1892,7 @@ export default function StorySchedulePreview({
                             }}
                           >
                             <div
-                              className="relative aspect-[16/9] w-full max-h-full self-center overflow-hidden rounded-[20px]"
+                              className="relative aspect-video w-full max-h-full self-center overflow-hidden rounded-[20px]"
                               style={{
                                 backgroundImage,
                                 backgroundColor: "rgba(0,0,0,0.2)",
@@ -1899,7 +1903,7 @@ export default function StorySchedulePreview({
                               }}
                             >
                               <div
-                                className="absolute left-3 top-3 inline-flex items-center gap-2 rounded-full bg-black/40 px-3 py-2 text-[13px] font-black uppercase tracking-[0.1em] text-white/95"
+                                className="absolute left-3 top-3 inline-flex items-center gap-2 rounded-full bg-black/40 px-3 py-2 text-[13px] font-black uppercase tracking-widest text-white/95"
                                 style={{
                                   left: scaleX(12),
                                   top: scaleY(12),
@@ -1910,7 +1914,7 @@ export default function StorySchedulePreview({
                                 }}
                               >
                                 <span
-                                  className="h-[10px] w-[10px] rounded-full bg-red-500 shadow-[0_0_0_6px_rgba(255,45,45,0.18)]"
+                                  className="h-2.5 w-2.5 rounded-full bg-red-500 shadow-[0_0_0_6px_rgba(255,45,45,0.18)]"
                                   style={{
                                     width: scaleUnit(10),
                                     height: scaleUnit(10),
@@ -2000,7 +2004,7 @@ export default function StorySchedulePreview({
                                         }}
                                       >
                                         <span
-                                          className={`h-[14px] w-[20px] overflow-hidden rounded-[3px] ${
+                                          className={`h-3.5 w-5 overflow-hidden rounded-[3px] ${
                                             hasCustomEmoji
                                               ? "shadow-none"
                                               : "shadow-[0_0_0_1px_rgba(255,255,255,0.18)]"
@@ -2044,7 +2048,7 @@ export default function StorySchedulePreview({
                               aria-label="Delete day"
                               onClick={(event) => {
                                 event.stopPropagation();
-                                onDeleteDay(day.id);
+                                onDeleteDayAction(day.id);
                               }}
                               className="absolute flex items-center justify-center rounded-full bg-red-500 text-white shadow-[0_6px_18px_rgba(0,0,0,0.35)] transition hover:bg-red-600"
                               style={{
@@ -2104,7 +2108,7 @@ export default function StorySchedulePreview({
                         ) : null}
                         <button
                           type="button"
-                          onClick={() => onSelectDay(day.id)}
+                          onClick={() => onSelectDayAction(day.id)}
                           draggable={canEdit}
                           onDragStart={(event) => handleDragStart(event, day.id)}
                           onDragOver={(event) =>
@@ -2114,7 +2118,7 @@ export default function StorySchedulePreview({
                           onDrop={(event) => handleDrop(event, day.id, "y")}
                           onDragEnd={handleDragEnd}
                           aria-pressed={isSelected}
-                          className={`flex min-h-0 h-[250px] w-full flex-col rounded-[28px] bg-white/10 p-5 text-left backdrop-blur-[10px] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${
+                          className={`flex min-h-0 h-62.5 w-full flex-col rounded-[28px] bg-white/10 p-5 text-left backdrop-blur-[10px] transition focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${
                             canEdit ? "cursor-grab active:cursor-grabbing" : ""
                           }`}
                           style={{
@@ -2206,7 +2210,7 @@ export default function StorySchedulePreview({
                               return (
                                 <div
                                   key={stream.id}
-                                  className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[16px] border border-white/15 bg-white/10 text-white/95"
+                                  className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/15 bg-white/10 text-white/95"
                                   style={{
                                     gap: scaleUnit(8) * streamScale,
                                     padding: `${scaleY(12) * streamScale}px ${
@@ -2282,7 +2286,7 @@ export default function StorySchedulePreview({
                                             }}
                                           >
                                             <span
-                                              className={`h-[14px] w-[20px] overflow-hidden rounded-[3px] ${
+                                              className={`h-3.5 w-5 overflow-hidden rounded-[3px] ${
                                                 hasCustomEmoji
                                                   ? "shadow-none"
                                                   : "shadow-[0_0_0_1px_rgba(255,255,255,0.18)]"
@@ -2332,7 +2336,7 @@ export default function StorySchedulePreview({
                             aria-label="Delete day"
                             onClick={(event) => {
                               event.stopPropagation();
-                              onDeleteDay(day.id);
+                              onDeleteDayAction(day.id);
                             }}
                             className="absolute flex items-center justify-center rounded-full bg-red-500 text-white shadow-[0_6px_18px_rgba(0,0,0,0.35)] transition hover:bg-red-600"
                             style={{
@@ -2363,9 +2367,9 @@ export default function StorySchedulePreview({
                 >
                     <button
                       type="button"
-                      onClick={onSelectFooter}
+                      onClick={onSelectFooterAction}
                       aria-pressed={isFooterSelected}
-                      className={`inline-flex items-center rounded-full text-[38px] font-black leading-none tracking-[0.02em] text-white/95 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${footerClass}`}
+                      className={`inline-flex items-center rounded-full text-[38px] font-black leading-none tracking-[0.02em] text-white/95 transition focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${footerClass}`}
                       style={{
                         minHeight: footerHeight,
                         padding: `${footerMetrics.paddingY}px ${footerMetrics.paddingX}px`,
@@ -2395,3 +2399,4 @@ export default function StorySchedulePreview({
     </div>
   );
 }
+

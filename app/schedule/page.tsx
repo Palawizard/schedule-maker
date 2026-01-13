@@ -1223,7 +1223,7 @@ export default function SchedulePage() {
       }
     };
 
-    runExport();
+    void runExport();
   }, [
     exportRequested,
     isExportingView,
@@ -1231,19 +1231,20 @@ export default function SchedulePage() {
     exportHeight,
     scheduleName,
     exportSizeId,
+    selectedExport?.label,
   ]);
 
   return (
     <div className="page-shell min-h-screen">
       <div className="relative overflow-hidden">
-        <div className="hero-glow pointer-events-none absolute -top-32 left-0 h-[360px] w-[360px] opacity-70 blur-3xl" />
+        <div className="hero-glow pointer-events-none absolute -top-32 left-0 h-90 w-90 opacity-70 blur-3xl" />
         <header className="relative z-10 mx-auto w-full max-w-6xl px-6 py-6">
           <div className="flex items-center justify-between rounded-[26px] border border-slate-200 bg-white px-4 py-3 shadow-[0_18px_40px_rgba(20,27,42,0.12)]">
             <Link className="flex items-center gap-3 text-lg font-semibold" href="/">
-              <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[var(--accent)] text-white">
+              <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-(--accent) text-white">
                 P
               </span>
-              Pala's Stream Schedule Maker
+              Pala&apos;s Stream Schedule Maker
             </Link>
             <Link
               className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
@@ -1254,7 +1255,7 @@ export default function SchedulePage() {
           </div>
         </header>
 
-        <main className="relative z-10 mx-auto w-full max-w-[1760px] px-3 pb-20 lg:px-5">
+        <main className="relative z-10 mx-auto w-full max-w-440 px-3 pb-20 lg:px-5">
           <div className="mb-8">
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
               Builder
@@ -1269,7 +1270,7 @@ export default function SchedulePage() {
                   onClick={() => setIsPreviewMode(false)}
                   className={`rounded-full px-3 py-1 transition ${
                     !isPreviewMode
-                      ? "bg-[var(--accent)] text-white"
+                      ? "bg-(--accent) text-white"
                       : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
@@ -1280,7 +1281,7 @@ export default function SchedulePage() {
                   onClick={() => setIsPreviewMode(true)}
                   className={`rounded-full px-3 py-1 transition ${
                     isPreviewMode
-                      ? "bg-[var(--accent)] text-white"
+                      ? "bg-(--accent) text-white"
                       : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
@@ -1359,7 +1360,7 @@ export default function SchedulePage() {
                           aria-pressed={exportSizeId === size.id}
                           className={`flex w-full items-center justify-between rounded-2xl border bg-white px-3 py-2 text-left text-xs font-semibold transition ${
                             exportSizeId === size.id
-                              ? "border-[var(--accent)] text-slate-900"
+                              ? "border-(--accent) text-slate-900"
                               : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
                           }`}
                         >
@@ -1445,7 +1446,7 @@ export default function SchedulePage() {
               </aside>
             ) : null}
 
-            <div className="rounded-[32px] border border-slate-200 bg-white/80 p-6 shadow-[0_30px_80px_rgba(20,27,42,0.14)]">
+            <div className="rounded-4xl border border-slate-200 bg-white/80 p-6 shadow-[0_30px_80px_rgba(20,27,42,0.14)]">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
@@ -1463,7 +1464,7 @@ export default function SchedulePage() {
                     type="button"
                     onClick={handleDownloadClick}
                     disabled={isDownloading || !isPreviewMode}
-                    className="rounded-full bg-[var(--accent)] px-4 py-2 text-white transition hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+                    className="rounded-full bg-(--accent) px-4 py-2 text-white transition hover:bg-(--accent-strong) disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isDownloading
                       ? "Preparing..."
@@ -1474,7 +1475,7 @@ export default function SchedulePage() {
                 </div>
               </div>
 
-              <div className="mt-6 flex flex-col items-center rounded-[28px] border border-slate-200 bg-[var(--paper)] p-4">
+              <div className="mt-6 flex flex-col items-center rounded-[28px] border border-slate-200 bg-(--paper) p-4">
                 <StorySchedulePreview
                   days={previewDays}
                   selectedDayId={selectedDayId}
@@ -1483,18 +1484,18 @@ export default function SchedulePage() {
                       ? null
                       : selectedElement?.type ?? null
                   }
-                  onSelectDay={
+                  onSelectDayAction={
                     isPreviewMode || isExportingView ? () => {} : selectDay
                   }
-                  onSelectHeader={
+                  onSelectHeaderAction={
                     isPreviewMode || isExportingView ? () => {} : selectHeader
                   }
-                  onSelectFooter={
+                  onSelectFooterAction={
                     isPreviewMode || isExportingView ? () => {} : selectFooter
                   }
-                  onAddDay={addDay}
-                  onDeleteDay={requestDeleteDay}
-                  onReorderDay={reorderDays}
+                  onAddDayAction={addDay}
+                  onDeleteDayAction={requestDeleteDay}
+                  onReorderDayAction={reorderDays}
                   canAddDay={canAddDay}
                   showAddControls={!isPreviewMode && !isExportingView}
                   isExporting={isExportingView}
@@ -1515,7 +1516,7 @@ export default function SchedulePage() {
 
             {!isPreviewMode ? (
               <aside className="space-y-6">
-                <div className="rounded-[28px] border border-slate-200 bg-[var(--paper)] p-6 shadow-[0_20px_50px_rgba(20,27,42,0.08)]">
+                <div className="rounded-[28px] border border-slate-200 bg-(--paper) p-6 shadow-[0_20px_50px_rgba(20,27,42,0.08)]">
                 <h2 className="font-display text-xl text-slate-900">
                   Inspector
                 </h2>
@@ -1637,7 +1638,7 @@ export default function SchedulePage() {
                                       aria-pressed={isActive}
                                       className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
                                         isActive
-                                          ? "border-[var(--accent)] text-slate-900"
+                                          ? "border-(--accent) text-slate-900"
                                           : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
                                       }`}
                                     >
@@ -1829,7 +1830,7 @@ export default function SchedulePage() {
                                           aria-pressed={slot.zoneId === option.id}
                                           className={`flex flex-col gap-1 rounded-2xl border px-3 py-2 text-left text-xs font-semibold transition ${
                                             slot.zoneId === option.id
-                                              ? "border-[var(--accent)] text-slate-900"
+                                              ? "border-(--accent) text-slate-900"
                                               : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
                                           }`}
                                         >
@@ -2019,7 +2020,7 @@ export default function SchedulePage() {
                           aria-pressed={headerAlignment === "left"}
                           className={`flex-1 rounded-2xl border px-3 py-2 text-xs font-semibold transition ${
                             headerAlignment === "left"
-                              ? "border-[var(--accent)] text-slate-900"
+                              ? "border-(--accent) text-slate-900"
                               : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
                           }`}
                         >
@@ -2031,7 +2032,7 @@ export default function SchedulePage() {
                           aria-pressed={headerAlignment === "center"}
                           className={`flex-1 rounded-2xl border px-3 py-2 text-xs font-semibold transition ${
                             headerAlignment === "center"
-                              ? "border-[var(--accent)] text-slate-900"
+                              ? "border-(--accent) text-slate-900"
                               : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
                           }`}
                         >
@@ -2051,7 +2052,7 @@ export default function SchedulePage() {
                           aria-pressed={headerTone === "bright"}
                           className={`flex-1 rounded-2xl border px-3 py-2 text-xs font-semibold transition ${
                             headerTone === "bright"
-                              ? "border-[var(--accent)] text-slate-900"
+                              ? "border-(--accent) text-slate-900"
                               : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
                           }`}
                         >
@@ -2063,7 +2064,7 @@ export default function SchedulePage() {
                           aria-pressed={headerTone === "soft"}
                           className={`flex-1 rounded-2xl border px-3 py-2 text-xs font-semibold transition ${
                             headerTone === "soft"
-                              ? "border-[var(--accent)] text-slate-900"
+                              ? "border-(--accent) text-slate-900"
                               : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
                           }`}
                         >
@@ -2110,7 +2111,7 @@ export default function SchedulePage() {
                           aria-pressed={footerStyle === "solid"}
                           className={`flex-1 rounded-2xl border px-3 py-2 text-xs font-semibold transition ${
                             footerStyle === "solid"
-                              ? "border-[var(--accent)] text-slate-900"
+                              ? "border-(--accent) text-slate-900"
                               : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
                           }`}
                         >
@@ -2122,7 +2123,7 @@ export default function SchedulePage() {
                           aria-pressed={footerStyle === "glass"}
                           className={`flex-1 rounded-2xl border px-3 py-2 text-xs font-semibold transition ${
                             footerStyle === "glass"
-                              ? "border-[var(--accent)] text-slate-900"
+                              ? "border-(--accent) text-slate-900"
                               : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
                           }`}
                         >
@@ -2142,7 +2143,7 @@ export default function SchedulePage() {
                           aria-pressed={footerSize === "regular"}
                           className={`flex-1 rounded-2xl border px-3 py-2 text-xs font-semibold transition ${
                             footerSize === "regular"
-                              ? "border-[var(--accent)] text-slate-900"
+                              ? "border-(--accent) text-slate-900"
                               : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
                           }`}
                         >
@@ -2154,7 +2155,7 @@ export default function SchedulePage() {
                           aria-pressed={footerSize === "compact"}
                           className={`flex-1 rounded-2xl border px-3 py-2 text-xs font-semibold transition ${
                             footerSize === "compact"
-                              ? "border-[var(--accent)] text-slate-900"
+                              ? "border-(--accent) text-slate-900"
                               : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
                           }`}
                         >
