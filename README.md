@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Pala's Stream Schedule Maker
 
-## Getting Started
+Studio web pour creer des plannings de stream lisibles et exportables en PNG.
 
-First, run the development server:
+## Fonctionnalites principales
+
+- Edition des jours, streams et time slots avec gestion des jours off.
+- Conversion de fuseaux horaires avec options predefinies et mode custom.
+- Deux modes: edition et preview pour un rendu propre avant export.
+- Export PNG en formats Story, YouTube post, X vertical et X horizontal.
+- Personnalisation des entetes et du pied de page (titre, alignement, style, taille).
+- Reorganisation des jours par glisser-deposer et gestion des miniatures.
+
+## Parcours rapide
+
+1. Ouvrir `http://localhost:3000` pour la page d'accueil.
+2. Lancer le studio via `http://localhost:3000/schedule`.
+3. Nommer la semaine, choisir le fuseau de base.
+4. Ajouter des streams et des slots horaires.
+5. Passer en preview et telecharger le PNG.
+
+## Installation
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Scripts
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- `npm run dev` lance le serveur de dev
+- `npm run build` build de production
+- `npm run start` demarre le build
+- `npm run lint` lance ESLint
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Stack
 
-## Learn More
+- Next.js 16 (App Router)
+- React 19
+- Tailwind CSS 4
+- emoji-picker-react, html-to-image
 
-To learn more about Next.js, take a look at the following resources:
+## Structure du projet
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `app/page.tsx` page d'accueil et presentation
+- `app/schedule/page.tsx` studio d'edition
+- `app/schedule/StorySchedulePreview.tsx` rendu canvas et export
+- `app/api/image-proxy/route.ts` proxy d'images pour miniatures externes
+- `app/globals.css` theme et animations
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Notes
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Le proxy d'images permet d'afficher des miniatures distantes et d'eviter les soucis CORS.
+- L'export PNG est genere depuis le DOM en mode preview via html-to-image.
