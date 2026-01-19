@@ -145,6 +145,12 @@ type StorySchedulePreviewProps = {
     targetId: string,
     position: "before" | "after",
   ) => void;
+  onReorderStreamAction: (
+    dayId: string,
+    dragId: string,
+    targetId: string,
+    position: "before" | "after",
+  ) => void;
   canAddDay: boolean;
   showAddControls: boolean;
   isExporting: boolean;
@@ -361,6 +367,7 @@ export default function StorySchedulePreview({
   onAddDayAction,
   onDeleteDayAction,
   onReorderDayAction,
+  onReorderStreamAction,
   canAddDay,
   showAddControls,
   isExporting,
@@ -382,6 +389,14 @@ export default function StorySchedulePreview({
   const [draggingDayId, setDraggingDayId] = useState<string | null>(null);
   const [dragOverDayId, setDragOverDayId] = useState<string | null>(null);
   const [dragOverPosition, setDragOverPosition] = useState<
+    "before" | "after" | null
+  >(null);
+  const [draggingStreamId, setDraggingStreamId] = useState<string | null>(null);
+  const [draggingStreamDayId, setDraggingStreamDayId] = useState<string | null>(
+    null,
+  );
+  const [dragOverStreamId, setDragOverStreamId] = useState<string | null>(null);
+  const [dragOverStreamPosition, setDragOverStreamPosition] = useState<
     "before" | "after" | null
   >(null);
   const isLandscape = canvasWidth > canvasHeight;
@@ -411,6 +426,7 @@ export default function StorySchedulePreview({
 
   const handleDragStart = (event: DragEvent, dayId: string) => {
     if (!canEdit) return;
+    if (draggingStreamId) return;
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", dayId);
     setDraggingDayId(dayId);
@@ -421,6 +437,7 @@ export default function StorySchedulePreview({
 
   const handleDragOver = (event: DragEvent, dayId: string, axis: "x" | "y") => {
     if (!canEdit) return;
+    if (draggingStreamId) return;
     event.preventDefault();
     if (dayId === draggingDayId) {
       setDragOverDayId(null);
@@ -452,6 +469,7 @@ export default function StorySchedulePreview({
     axis: "x" | "y",
   ) => {
     if (!canEdit) return;
+    if (draggingStreamId) return;
     event.preventDefault();
     const dragId = draggingDayId ?? event.dataTransfer.getData("text/plain");
     if (!dragId || dragId === dayId) {
@@ -477,6 +495,105 @@ export default function StorySchedulePreview({
     setDragOverDayId(null);
     setDragOverPosition(null);
     setDraggingDayId(null);
+  };
+
+  const handleStreamDragStart = (
+    event: DragEvent,
+    dayId: string,
+    streamId: string,
+  ) => {
+    if (!canEdit) return;
+    event.stopPropagation();
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", streamId);
+    setDraggingDayId(null);
+    setDragOverDayId(null);
+    setDragOverPosition(null);
+    setDraggingStreamId(streamId);
+    setDraggingStreamDayId(dayId);
+    setDragOverStreamId(null);
+    setDragOverStreamPosition(null);
+    onSelectDayAction(dayId);
+  };
+
+  const handleStreamDragOver = (
+    event: DragEvent,
+    dayId: string,
+    streamId: string,
+    axis: "x" | "y",
+  ) => {
+    if (!canEdit) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (!draggingStreamId || draggingStreamDayId !== dayId) {
+      setDragOverStreamId(null);
+      setDragOverStreamPosition(null);
+      return;
+    }
+    if (streamId === draggingStreamId) {
+      setDragOverStreamId(null);
+      setDragOverStreamPosition(null);
+      return;
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    const midpoint =
+      axis === "x"
+        ? rect.left + rect.width / 2
+        : rect.top + rect.height / 2;
+    const cursor = axis === "x" ? event.clientX : event.clientY;
+    const position = cursor < midpoint ? "before" : "after";
+    setDragOverStreamId(streamId);
+    setDragOverStreamPosition(position);
+  };
+
+  const handleStreamDragLeave = (event: DragEvent) => {
+    if (!canEdit) return;
+    event.stopPropagation();
+    const related = event.relatedTarget as Node | null;
+    if (related && event.currentTarget.contains(related)) return;
+    setDragOverStreamId(null);
+    setDragOverStreamPosition(null);
+  };
+
+  const handleStreamDrop = (
+    event: DragEvent,
+    dayId: string,
+    streamId: string,
+    axis: "x" | "y",
+  ) => {
+    if (!canEdit) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const dragId =
+      draggingStreamDayId === dayId
+        ? draggingStreamId
+        : event.dataTransfer.getData("text/plain");
+    if (!dragId || dragId === streamId || draggingStreamDayId !== dayId) {
+      setDragOverStreamId(null);
+      setDragOverStreamPosition(null);
+      setDraggingStreamId(null);
+      setDraggingStreamDayId(null);
+      return;
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    const midpoint =
+      axis === "x"
+        ? rect.left + rect.width / 2
+        : rect.top + rect.height / 2;
+    const cursor = axis === "x" ? event.clientX : event.clientY;
+    const position = cursor < midpoint ? "before" : "after";
+    onReorderStreamAction(dayId, dragId, streamId, position);
+    setDragOverStreamId(null);
+    setDragOverStreamPosition(null);
+    setDraggingStreamId(null);
+    setDraggingStreamDayId(null);
+  };
+
+  const handleStreamDragEnd = () => {
+    setDragOverStreamId(null);
+    setDragOverStreamPosition(null);
+    setDraggingStreamId(null);
+    setDraggingStreamDayId(null);
   };
 
   useEffect(() => {
@@ -930,7 +1047,7 @@ export default function StorySchedulePreview({
                           const isDragOver =
                             dragOverDayId === day.id && draggingDayId !== day.id;
                           const dropIndicator =
-                            isDragOver && dragOverPosition
+                            isDragOver && dragOverPosition && !draggingStreamId
                               ? dragOverPosition
                               : null;
                           const tileWeight = day.off ? offDayWeight : streamDayWeight;
@@ -1442,6 +1559,16 @@ export default function StorySchedulePreview({
                                         10,
                                         Math.round(flagHeight * 1.25),
                                       );
+                                      const isStreamDragOver =
+                                        dragOverStreamId === stream.id &&
+                                        draggingStreamDayId === day.id;
+                                      const isStreamDragging =
+                                        draggingStreamId === stream.id &&
+                                        draggingStreamDayId === day.id;
+                                      const streamDropIndicator =
+                                        isStreamDragOver && dragOverStreamPosition
+                                          ? dragOverStreamPosition
+                                          : null;
                                       const streamBackground = stream.thumbUrl
                                         ? `${thumbOverlay}, linear-gradient(180deg, rgba(8,8,14,0.55), rgba(8,8,14,0.55)), url("${stream.thumbUrl}")`
                                         : `${thumbOverlay}, linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0))`;
@@ -1449,19 +1576,76 @@ export default function StorySchedulePreview({
                                       return (
                                         <div
                                           key={stream.id}
-                                          className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/15 bg-white/10 text-white/95"
-                                          style={{
-                                            gap: streamUnit(6),
-                                            padding: `${streamUnit(8)}px ${streamUnit(
-                                              10,
-                                            )}px`,
-                                            backgroundImage: streamBackground,
-                                            backgroundSize: "cover",
-                                            backgroundPosition: "center",
-                                            backgroundBlendMode:
-                                              "screen, normal, normal",
-                                          }}
+                                          className="relative flex min-h-0 flex-1"
                                         >
+                                          {streamDropIndicator ? (
+                                            <div
+                                              aria-hidden="true"
+                                              className="pointer-events-none absolute left-0 right-0"
+                                              style={{
+                                                top:
+                                                  streamDropIndicator === "before"
+                                                    ? streamUnit(-6)
+                                                    : "auto",
+                                                bottom:
+                                                  streamDropIndicator === "after"
+                                                    ? streamUnit(-6)
+                                                    : "auto",
+                                                height: streamUnit(4),
+                                                borderRadius: streamUnit(4),
+                                                background: dropIndicatorHorizontal,
+                                                boxShadow: dropIndicatorShadow,
+                                                zIndex: 15,
+                                              }}
+                                            />
+                                          ) : null}
+                                          <div
+                                            className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/15 bg-white/10 text-white/95"
+                                            draggable={canEdit && day.streams.length > 1}
+                                            onDragStart={(event) =>
+                                              handleStreamDragStart(
+                                                event,
+                                                day.id,
+                                                stream.id,
+                                              )
+                                            }
+                                            onDragOver={(event) =>
+                                              handleStreamDragOver(
+                                                event,
+                                                day.id,
+                                                stream.id,
+                                                "y",
+                                              )
+                                            }
+                                            onDragLeave={handleStreamDragLeave}
+                                            onDrop={(event) =>
+                                              handleStreamDrop(
+                                                event,
+                                                day.id,
+                                                stream.id,
+                                                "y",
+                                              )
+                                            }
+                                            onDragEnd={handleStreamDragEnd}
+                                            style={{
+                                              gap: streamUnit(6),
+                                              padding: `${streamUnit(8)}px ${streamUnit(
+                                                10,
+                                              )}px`,
+                                              backgroundImage: streamBackground,
+                                              backgroundSize: "cover",
+                                              backgroundPosition: "center",
+                                              backgroundBlendMode:
+                                                "screen, normal, normal",
+                                              outline: isStreamDragOver
+                                                ? `${tileUnit(1.5)}px solid ${accentGlow}`
+                                                : "none",
+                                              outlineOffset: isStreamDragOver
+                                                ? tileUnit(2)
+                                                : 0,
+                                              opacity: isStreamDragging ? 0.7 : 1,
+                                            }}
+                                          >
                                           <div
                                             className="font-black leading-[1.16] tracking-[-0.01em]"
                                             style={{
@@ -1593,6 +1777,7 @@ export default function StorySchedulePreview({
                                                 );
                                               })
                                             )}
+                                          </div>
                                           </div>
                                         </div>
                                       );
@@ -1812,7 +1997,7 @@ export default function StorySchedulePreview({
                     const isDragOver =
                       dragOverDayId === day.id && draggingDayId !== day.id;
                     const dropIndicator =
-                      isDragOver && dragOverPosition
+                      isDragOver && dragOverPosition && !draggingStreamId
                         ? dragOverPosition
                         : null;
                     if (day.off) {
@@ -2358,6 +2543,16 @@ export default function StorySchedulePreview({
                                   : slotCount > 0
                                     ? "nowrap"
                                     : "wrap";
+                              const isStreamDragOver =
+                                dragOverStreamId === stream.id &&
+                                draggingStreamDayId === day.id;
+                              const isStreamDragging =
+                                draggingStreamId === stream.id &&
+                                draggingStreamDayId === day.id;
+                              const streamDropIndicator =
+                                isStreamDragOver && dragOverStreamPosition
+                                  ? dragOverStreamPosition
+                                  : null;
                               const streamBackground = stream.thumbUrl
                                 ? `${thumbOverlay}, linear-gradient(180deg, rgba(8,8,14,0.55), rgba(8,8,14,0.55)), url("${stream.thumbUrl}")`
                                 : `${thumbOverlay}, linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0))`;
@@ -2365,31 +2560,88 @@ export default function StorySchedulePreview({
                               return (
                                 <div
                                   key={stream.id}
-                                  className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border text-white/95"
-                                  style={{
-                                    gap: scaleUnit(8) * streamScale,
-                                    padding: `${scaleY(12) * streamScale}px ${
-                                      scaleX(12) * streamScale
-                                    }px`,
-                                    backgroundImage: streamBackground,
-                                    backgroundSize: "cover",
-                                    backgroundPosition: "center",
-                                    backgroundBlendMode:
-                                      "screen, normal, normal",
-                                    backgroundColor: cardSurfaceStrong,
-                                    borderColor,
-                                    borderWidth: Math.max(
-                                      portraitStreamBorderWidth,
-                                      cardBorderWidthRender,
-                                    ),
-                                    borderStyle: "solid",
-                                  }}
+                                  className="relative flex min-h-0 flex-1"
                                 >
-                                      <div
-                                        className="font-black leading-[1.12] tracking-[-0.02em]"
-                                        style={{
-                                          fontFamily: headingFont,
-                                          fontSize: streamTitleFont,
+                                  {streamDropIndicator ? (
+                                    <div
+                                      aria-hidden="true"
+                                      className="pointer-events-none absolute top-0 bottom-0"
+                                      style={{
+                                        left:
+                                          streamDropIndicator === "before"
+                                            ? scaleUnit(-6)
+                                            : "auto",
+                                        right:
+                                          streamDropIndicator === "after"
+                                            ? scaleUnit(-6)
+                                            : "auto",
+                                        width: scaleUnit(4),
+                                        borderRadius: scaleUnit(4),
+                                        background: dropIndicatorVertical,
+                                        boxShadow: dropIndicatorShadow,
+                                        zIndex: 15,
+                                      }}
+                                    />
+                                  ) : null}
+                                  <div
+                                    className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border text-white/95"
+                                    draggable={canEdit && day.streams.length > 1}
+                                    onDragStart={(event) =>
+                                      handleStreamDragStart(
+                                        event,
+                                        day.id,
+                                        stream.id,
+                                      )
+                                    }
+                                    onDragOver={(event) =>
+                                      handleStreamDragOver(
+                                        event,
+                                        day.id,
+                                        stream.id,
+                                        "x",
+                                      )
+                                    }
+                                    onDragLeave={handleStreamDragLeave}
+                                    onDrop={(event) =>
+                                      handleStreamDrop(
+                                        event,
+                                        day.id,
+                                        stream.id,
+                                        "x",
+                                      )
+                                    }
+                                    onDragEnd={handleStreamDragEnd}
+                                    style={{
+                                      gap: scaleUnit(8) * streamScale,
+                                      padding: `${scaleY(12) * streamScale}px ${
+                                        scaleX(12) * streamScale
+                                      }px`,
+                                      backgroundImage: streamBackground,
+                                      backgroundSize: "cover",
+                                      backgroundPosition: "center",
+                                      backgroundBlendMode:
+                                        "screen, normal, normal",
+                                      backgroundColor: cardSurfaceStrong,
+                                      borderColor,
+                                      borderWidth: Math.max(
+                                        portraitStreamBorderWidth,
+                                        cardBorderWidthRender,
+                                      ),
+                                      borderStyle: "solid",
+                                      outline: isStreamDragOver
+                                        ? `${scaleUnit(1.5)}px solid ${accentGlow}`
+                                        : "none",
+                                      outlineOffset: isStreamDragOver
+                                        ? scaleUnit(2)
+                                        : 0,
+                                      opacity: isStreamDragging ? 0.7 : 1,
+                                    }}
+                                  >
+                                  <div
+                                    className="font-black leading-[1.12] tracking-[-0.02em]"
+                                    style={{
+                                      fontFamily: headingFont,
+                                      fontSize: streamTitleFont,
                                           display: "-webkit-box",
                                           WebkitLineClamp: 2,
                                           WebkitBoxOrient: "vertical",
@@ -2485,6 +2737,7 @@ export default function StorySchedulePreview({
                                         );
                                       })
                                     )}
+                                  </div>
                                   </div>
                                 </div>
                               );

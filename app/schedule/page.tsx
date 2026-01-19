@@ -1318,6 +1318,31 @@ export default function SchedulePage() {
     });
   };
 
+  const reorderStreams = (
+    dayId: string,
+    dragId: string,
+    targetId: string,
+    position: "before" | "after",
+  ) => {
+    if (dragId === targetId) return;
+    setDays((prev) =>
+      prev.map((day) => {
+        if (day.id !== dayId) return day;
+        const dragged = day.streams.find((stream) => stream.id === dragId);
+        if (!dragged) return day;
+        const remaining = day.streams.filter((stream) => stream.id !== dragId);
+        const targetIndex = remaining.findIndex(
+          (stream) => stream.id === targetId,
+        );
+        if (targetIndex === -1) return day;
+        const insertIndex = position === "after" ? targetIndex + 1 : targetIndex;
+        const nextStreams = [...remaining];
+        nextStreams.splice(insertIndex, 0, dragged);
+        return { ...day, streams: nextStreams };
+      }),
+    );
+  };
+
   const updateDay = (id: string, patch: Partial<StoryDay>) => {
     setDays((prev) =>
       prev.map((day) => (day.id === id ? { ...day, ...patch } : day)),
@@ -1934,7 +1959,7 @@ export default function SchedulePage() {
 
   return (
     <div className="page-shell min-h-screen">
-      <div className="relative overflow-hidden">
+      <div className="relative">
         <div className="hero-glow pointer-events-none absolute -top-32 left-0 h-90 w-90 opacity-70 blur-3xl" />
         <header className="relative z-10 mx-auto w-full max-w-6xl px-6 py-6">
           <div className="flex items-center justify-between rounded-[26px] border border-slate-200 bg-white px-4 py-3 shadow-[0_18px_40px_rgba(20,27,42,0.12)]">
@@ -1997,7 +2022,7 @@ export default function SchedulePage() {
             className={`grid gap-5 ${
               isPreviewMode
                 ? "lg:grid-cols-1"
-                : "lg:grid-cols-[280px_minmax(0,1fr)_280px]"
+                : "lg:grid-cols-[280px_minmax(0,1fr)_280px] items-start"
             }`}
           >
             {!isPreviewMode ? (
@@ -2375,7 +2400,11 @@ export default function SchedulePage() {
               </aside>
             ) : null}
 
-            <div className="rounded-4xl border border-slate-200 bg-white/80 p-6 shadow-[0_30px_80px_rgba(20,27,42,0.14)]">
+            <div
+              className={`rounded-4xl border border-slate-200 bg-white/80 p-6 shadow-[0_30px_80px_rgba(20,27,42,0.14)] ${
+                !isPreviewMode ? "sticky top-6 self-start" : ""
+              }`}
+            >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
@@ -2404,7 +2433,11 @@ export default function SchedulePage() {
                 </div>
               </div>
 
-              <div className="mt-6 flex flex-col items-center rounded-[28px] border border-slate-200 bg-(--paper) p-4">
+              <div
+                className={`mt-6 flex flex-col items-center rounded-[28px] border border-slate-200 bg-(--paper) p-4 ${
+                  !isPreviewMode ? "max-h-[calc(100vh-240px)] overflow-y-auto" : ""
+                }`}
+              >
                 <StorySchedulePreview
                   days={previewDays}
                   selectedDayId={selectedDayId}
@@ -2425,6 +2458,7 @@ export default function SchedulePage() {
                   onAddDayAction={addDay}
                   onDeleteDayAction={requestDeleteDay}
                   onReorderDayAction={reorderDays}
+                  onReorderStreamAction={reorderStreams}
                   canAddDay={canAddDay}
                   showAddControls={!isPreviewMode && !isExportingView}
                   isExporting={isExportingView}
