@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Link from "next/link";
 import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
 import { toPng } from "html-to-image";
-import StorySchedulePreview, { StoryDay } from "./StorySchedulePreview";
+import StorySchedulePreview, {
+  StoryDay,
+  type PreviewTheme,
+} from "./StorySchedulePreview";
 
 const weekDays = [
   "Monday",
@@ -184,6 +187,346 @@ const slotZoneOptions: SlotZoneOption[] = [
     description: "Manual entry",
   },
 ];
+
+type ThemeBackgroundOption = {
+  id: string;
+  label: string;
+  description: string;
+  background: string;
+  thumbOverlay: string;
+};
+
+type ThemePaletteOption = {
+  id: string;
+  label: string;
+  description: string;
+  accent: string;
+  accentSoft: string;
+  accentGlow: string;
+  border: string;
+  live: string;
+  liveGlow: string;
+};
+
+type ThemeFontOption = {
+  id: string;
+  label: string;
+  description: string;
+  body: string;
+  heading: string;
+};
+
+type ThemeCardStyleOption = {
+  id: string;
+  label: string;
+  description: string;
+  surface: string;
+  surfaceStrong: string;
+};
+
+type ThemeBorderOption = {
+  id: string;
+  label: string;
+  description: string;
+  frameRadius: number;
+  cardRadius: number;
+};
+
+type ThemeBorderWeightOption = {
+  id: string;
+  label: string;
+  description: string;
+  frameBorderWidth: number;
+  cardBorderWidth: number;
+};
+
+const themeBackgrounds: ThemeBackgroundOption[] = [
+  {
+    id: "nebula",
+    label: "Nebula",
+    description: "Violet and cyan haze",
+    background:
+      "radial-gradient(820px 560px at 22% 14%, rgba(124,58,237,0.28), transparent 64%)," +
+      "radial-gradient(820px 600px at 84% 22%, rgba(34,211,238,0.16), transparent 66%)," +
+      "linear-gradient(180deg, rgb(9,7,24), rgb(11,7,34))",
+    thumbOverlay:
+      "linear-gradient(135deg, rgba(124,58,237,0.2), rgba(34,211,238,0.14))",
+  },
+  {
+    id: "sunset",
+    label: "Sunset",
+    description: "Warm orange glow",
+    background:
+      "radial-gradient(820px 560px at 20% 16%, rgba(251,146,60,0.28), transparent 64%)," +
+      "radial-gradient(760px 560px at 82% 20%, rgba(244,63,94,0.22), transparent 60%)," +
+      "linear-gradient(180deg, rgb(20,7,16), rgb(34,10,22))",
+    thumbOverlay:
+      "linear-gradient(135deg, rgba(251,146,60,0.2), rgba(244,63,94,0.16))",
+  },
+  {
+    id: "coast",
+    label: "Coast",
+    description: "Cool teal drift",
+    background:
+      "radial-gradient(820px 560px at 20% 16%, rgba(14,165,233,0.26), transparent 64%)," +
+      "radial-gradient(760px 560px at 82% 22%, rgba(45,212,191,0.2), transparent 60%)," +
+      "linear-gradient(180deg, rgb(7,12,24), rgb(9,20,32))",
+    thumbOverlay:
+      "linear-gradient(135deg, rgba(14,165,233,0.2), rgba(45,212,191,0.14))",
+  },
+  {
+    id: "graphite",
+    label: "Graphite",
+    description: "Minimal charcoal",
+    background:
+      "radial-gradient(760px 500px at 18% 18%, rgba(148,163,184,0.2), transparent 60%)," +
+      "radial-gradient(760px 520px at 82% 26%, rgba(71,85,105,0.24), transparent 60%)," +
+      "linear-gradient(180deg, rgb(10,12,16), rgb(20,24,30))",
+    thumbOverlay:
+      "linear-gradient(135deg, rgba(148,163,184,0.18), rgba(71,85,105,0.12))",
+  },
+  {
+    id: "garden",
+    label: "Garden",
+    description: "Fresh green glow",
+    background:
+      "radial-gradient(820px 560px at 20% 16%, rgba(34,197,94,0.24), transparent 64%)," +
+      "radial-gradient(760px 560px at 82% 24%, rgba(132,204,22,0.2), transparent 60%)," +
+      "linear-gradient(180deg, rgb(8,16,12), rgb(12,24,16))",
+    thumbOverlay:
+      "linear-gradient(135deg, rgba(34,197,94,0.2), rgba(132,204,22,0.14))",
+  },
+];
+
+const themePalettes: ThemePaletteOption[] = [
+  {
+    id: "aurora",
+    label: "Aurora",
+    description: "Icy cyan spark",
+    accent: "#38bdf8",
+    accentSoft: "rgba(56,189,248,0.2)",
+    accentGlow: "rgba(56,189,248,0.55)",
+    border: "rgba(255,255,255,0.22)",
+    live: "#f87171",
+    liveGlow: "rgba(248,113,113,0.2)",
+  },
+  {
+    id: "ember",
+    label: "Ember",
+    description: "Hot orange core",
+    accent: "#fb923c",
+    accentSoft: "rgba(251,146,60,0.22)",
+    accentGlow: "rgba(251,146,60,0.55)",
+    border: "rgba(255,255,255,0.22)",
+    live: "#fb7185",
+    liveGlow: "rgba(251,113,133,0.22)",
+  },
+  {
+    id: "rose",
+    label: "Rose",
+    description: "Pink neon edge",
+    accent: "#fb7185",
+    accentSoft: "rgba(251,113,133,0.22)",
+    accentGlow: "rgba(251,113,133,0.55)",
+    border: "rgba(255,255,255,0.2)",
+    live: "#f97316",
+    liveGlow: "rgba(249,115,22,0.22)",
+  },
+  {
+    id: "citrus",
+    label: "Citrus",
+    description: "Lime voltage",
+    accent: "#a3e635",
+    accentSoft: "rgba(163,230,53,0.2)",
+    accentGlow: "rgba(163,230,53,0.5)",
+    border: "rgba(255,255,255,0.2)",
+    live: "#facc15",
+    liveGlow: "rgba(250,204,21,0.22)",
+  },
+  {
+    id: "gold",
+    label: "Gold",
+    description: "Amber flare",
+    accent: "#f59e0b",
+    accentSoft: "rgba(245,158,11,0.2)",
+    accentGlow: "rgba(245,158,11,0.5)",
+    border: "rgba(255,255,255,0.22)",
+    live: "#f97316",
+    liveGlow: "rgba(249,115,22,0.22)",
+  },
+];
+
+const themeFonts: ThemeFontOption[] = [
+  {
+    id: "grotesk-fraunces",
+    label: "Grotesk / Fraunces",
+    description: "Clean body, serif accents",
+    body: 'var(--font-space-grotesk), "Segoe UI", sans-serif',
+    heading: 'var(--font-fraunces), var(--font-space-grotesk), serif',
+  },
+  {
+    id: "fraunces-grotesk",
+    label: "Fraunces / Grotesk",
+    description: "Serif body, clean accents",
+    body: 'var(--font-fraunces), var(--font-space-grotesk), serif',
+    heading: 'var(--font-space-grotesk), "Segoe UI", sans-serif',
+  },
+  {
+    id: "grotesk-only",
+    label: "Grotesk only",
+    description: "Mono sans look",
+    body: 'var(--font-space-grotesk), "Segoe UI", sans-serif',
+    heading: 'var(--font-space-grotesk), "Segoe UI", sans-serif',
+  },
+  {
+    id: "fraunces-only",
+    label: "Fraunces only",
+    description: "Bold editorial",
+    body: 'var(--font-fraunces), var(--font-space-grotesk), serif',
+    heading: 'var(--font-fraunces), var(--font-space-grotesk), serif',
+  },
+];
+
+const themeCardStyles: ThemeCardStyleOption[] = [
+  {
+    id: "glass",
+    label: "Glass",
+    description: "Airy and translucent",
+    surface: "rgba(255,255,255,0.08)",
+    surfaceStrong: "rgba(255,255,255,0.16)",
+  },
+  {
+    id: "mist",
+    label: "Mist",
+    description: "Smoky contrast",
+    surface: "rgba(15,23,42,0.35)",
+    surfaceStrong: "rgba(15,23,42,0.55)",
+  },
+  {
+    id: "crisp",
+    label: "Crisp",
+    description: "Bright edges",
+    surface: "rgba(255,255,255,0.12)",
+    surfaceStrong: "rgba(255,255,255,0.22)",
+  },
+];
+
+const themeBorders: ThemeBorderOption[] = [
+  {
+    id: "soft",
+    label: "Soft",
+    description: "Rounded corners",
+    frameRadius: 38,
+    cardRadius: 28,
+  },
+  {
+    id: "sharp",
+    label: "Sharp",
+    description: "Tighter cuts",
+    frameRadius: 22,
+    cardRadius: 16,
+  },
+  {
+    id: "pill",
+    label: "Pill",
+    description: "Extra round",
+    frameRadius: 58,
+    cardRadius: 40,
+  },
+];
+
+const themeBorderWeights: ThemeBorderWeightOption[] = [
+  {
+    id: "hairline",
+    label: "Hairline",
+    description: "1px strokes",
+    frameBorderWidth: 1,
+    cardBorderWidth: 1,
+  },
+  {
+    id: "medium",
+    label: "Medium",
+    description: "2px strokes",
+    frameBorderWidth: 2,
+    cardBorderWidth: 2,
+  },
+  {
+    id: "bold",
+    label: "Bold",
+    description: "3px strokes",
+    frameBorderWidth: 3,
+    cardBorderWidth: 3,
+  },
+];
+
+const flagKeys: FlagKey[] = [
+  "uk",
+  "us",
+  "eu",
+  "jp",
+  "au",
+  "fr",
+  "de",
+  "es",
+  "it",
+  "br",
+  "in",
+  "kr",
+  "globe",
+];
+
+const flagKeySet = new Set(flagKeys);
+
+const isFlagKey = (value: unknown): value is FlagKey =>
+  typeof value === "string" && flagKeySet.has(value as FlagKey);
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const getString = (value: unknown, fallback = "") =>
+  typeof value === "string" ? value : fallback;
+
+const getBoolean = (value: unknown, fallback = false) =>
+  typeof value === "boolean" ? value : fallback;
+
+const getArray = <T,>(value: unknown): T[] =>
+  Array.isArray(value) ? (value as T[]) : [];
+
+const getMaxIdValue = (id: string) => {
+  const matches = id.match(/\d+/g);
+  if (!matches) return null;
+  return matches.reduce((max, match) => {
+    const value = Number.parseInt(match, 10);
+    if (Number.isNaN(value)) return max;
+    return Math.max(max, value);
+  }, -1);
+};
+
+type ThemeConfig = {
+  backgroundId: string;
+  paletteId: string;
+  fontId: string;
+  cardStyleId: string;
+  borderId: string;
+  borderWeightId: string;
+};
+
+type ScheduleFile = {
+  version: number;
+  scheduleName: string;
+  scheduleTimeZone: string;
+  exportSizeId: string;
+  showHeader: boolean;
+  headerTitle: string;
+  headerAlignment: "left" | "center";
+  headerTone: "bright" | "soft";
+  showFooter: boolean;
+  footerLink: string;
+  footerStyle: "solid" | "glass";
+  footerSize: "regular" | "compact";
+  theme: ThemeConfig;
+  days: StoryDay[];
+};
 
 
 const parseTimeValue = (value: string) => {
@@ -572,6 +915,7 @@ type SelectedElement =
 export default function SchedulePage() {
   const idRef = useRef(100);
   const previewRef = useRef<HTMLDivElement>(null);
+  const scheduleFileInputRef = useRef<HTMLInputElement>(null);
   const [scheduleName, setScheduleName] = useState("Week 24");
   const [timeZoneOptions, setTimeZoneOptions] =
     useState<TimeZoneOption[]>(defaultTimeZones);
@@ -603,6 +947,24 @@ export default function SchedulePage() {
   const [exportSizeId, setExportSizeId] = useState(
     exportSizes[0]?.id ?? "story",
   );
+  const [themeBackgroundId, setThemeBackgroundId] = useState(
+    themeBackgrounds[0]?.id ?? "nebula",
+  );
+  const [themePaletteId, setThemePaletteId] = useState(
+    themePalettes[0]?.id ?? "aurora",
+  );
+  const [themeFontId, setThemeFontId] = useState(
+    themeFonts[0]?.id ?? "grotesk-fraunces",
+  );
+  const [themeCardStyleId, setThemeCardStyleId] = useState(
+    themeCardStyles[0]?.id ?? "glass",
+  );
+  const [themeBorderId, setThemeBorderId] = useState(
+    themeBorders[0]?.id ?? "soft",
+  );
+  const [themeBorderWeightId, setThemeBorderWeightId] = useState(
+    themeBorderWeights[0]?.id ?? "hairline",
+  );
   const [activeEmojiPickerId, setActiveEmojiPickerId] = useState<string | null>(
     null,
   );
@@ -621,6 +983,7 @@ export default function SchedulePage() {
   const [localThumbNames, setLocalThumbNames] = useState<Record<string, string>>(
     {},
   );
+  const [scheduleFileError, setScheduleFileError] = useState<string | null>(null);
   const objectUrlsRef = useRef<Record<string, string>>({});
 
   const selectedDay = useMemo(
@@ -655,8 +1018,72 @@ export default function SchedulePage() {
       exportSizes.find((size) => size.id === exportSizeId) ?? exportSizes[0],
     [exportSizeId],
   );
+  const selectedThemeBackground = useMemo(
+    () =>
+      themeBackgrounds.find((option) => option.id === themeBackgroundId) ??
+      themeBackgrounds[0],
+    [themeBackgroundId],
+  );
+  const selectedThemePalette = useMemo(
+    () =>
+      themePalettes.find((option) => option.id === themePaletteId) ??
+      themePalettes[0],
+    [themePaletteId],
+  );
+  const selectedThemeFont = useMemo(
+    () =>
+      themeFonts.find((option) => option.id === themeFontId) ??
+      themeFonts[0],
+    [themeFontId],
+  );
+  const selectedThemeCardStyle = useMemo(
+    () =>
+      themeCardStyles.find((option) => option.id === themeCardStyleId) ??
+      themeCardStyles[0],
+    [themeCardStyleId],
+  );
+  const selectedThemeBorder = useMemo(
+    () =>
+      themeBorders.find((option) => option.id === themeBorderId) ??
+      themeBorders[0],
+    [themeBorderId],
+  );
+  const selectedThemeBorderWeight = useMemo(
+    () =>
+      themeBorderWeights.find((option) => option.id === themeBorderWeightId) ??
+      themeBorderWeights[0],
+    [themeBorderWeightId],
+  );
   const exportWidth = selectedExport?.width ?? 1080;
   const exportHeight = selectedExport?.height ?? 1920;
+  const previewTheme = useMemo<PreviewTheme>(
+    () => ({
+      background: selectedThemeBackground.background,
+      thumbOverlay: selectedThemeBackground.thumbOverlay,
+      accent: selectedThemePalette.accent,
+      accentSoft: selectedThemePalette.accentSoft,
+      accentGlow: selectedThemePalette.accentGlow,
+      borderColor: selectedThemePalette.border,
+      cardSurface: selectedThemeCardStyle.surface,
+      cardSurfaceStrong: selectedThemeCardStyle.surfaceStrong,
+      frameRadius: selectedThemeBorder.frameRadius,
+      cardRadius: selectedThemeBorder.cardRadius,
+      frameBorderWidth: selectedThemeBorderWeight.frameBorderWidth,
+      cardBorderWidth: selectedThemeBorderWeight.cardBorderWidth,
+      bodyFont: selectedThemeFont.body,
+      headingFont: selectedThemeFont.heading,
+      liveColor: selectedThemePalette.live,
+      liveGlow: selectedThemePalette.liveGlow,
+    }),
+    [
+      selectedThemeBackground,
+      selectedThemePalette,
+      selectedThemeCardStyle,
+      selectedThemeBorder,
+      selectedThemeBorderWeight,
+      selectedThemeFont,
+    ],
+  );
   const slotZoneMap = useMemo(
     () => new Map(slotZoneOptions.map((option) => [option.id, option])),
     [],
@@ -817,6 +1244,14 @@ export default function SchedulePage() {
 
   const canAddDay = days.length < 7;
 
+  const ensureTimeZoneOption = (zone: string) => {
+    if (!zone) return;
+    setTimeZoneOptions((prev) => {
+      if (prev.some((option) => option.id === zone)) return prev;
+      return [{ id: zone, label: zone }, ...prev];
+    });
+  };
+
   const getNextDayName = (currentDays: StoryDay[]) => {
     const used = new Set(currentDays.map((day) => day.day.toLowerCase()));
     return (
@@ -944,6 +1379,14 @@ export default function SchedulePage() {
       return next;
     });
     updateStream(dayId, streamId, { thumbUrl: "" });
+  };
+
+  const clearLocalThumbnails = () => {
+    Object.values(objectUrlsRef.current).forEach((url) =>
+      URL.revokeObjectURL(url),
+    );
+    objectUrlsRef.current = {};
+    setLocalThumbNames({});
   };
 
   const updateTimeSlot = (
@@ -1119,11 +1562,7 @@ export default function SchedulePage() {
   };
 
   const confirmClearAll = () => {
-    Object.values(objectUrlsRef.current).forEach((url) =>
-      URL.revokeObjectURL(url),
-    );
-    objectUrlsRef.current = {};
-    setLocalThumbNames({});
+    clearLocalThumbnails();
     setDays([]);
     setSelectedDayId(null);
     setSelectedStreamId(null);
@@ -1147,6 +1586,265 @@ export default function SchedulePage() {
 
   const cancelDeleteDay = () => {
     setPendingDeleteDayId(null);
+  };
+
+  const normalizeScheduleFile = (payload: unknown): ScheduleFile | null => {
+    if (!isRecord(payload)) return null;
+    const rawDays = Array.isArray(payload.days) ? payload.days : null;
+    if (!rawDays) return null;
+    let fallbackId = 1;
+    const makeFallbackId = (prefix: string) =>
+      `${prefix}-imported-${fallbackId++}`;
+    const normalizeSlot = (value: unknown): TimeSlot => {
+      const record = isRecord(value) ? value : {};
+      const zoneId = getString(record.zoneId, "uk");
+      const customLabel = getString(record.customLabel);
+      const customTime = getString(record.customTime);
+      const customZone = getString(record.customZone);
+      const customEmoji = getString(record.customEmoji);
+      const customFlag = isFlagKey(record.customFlag)
+        ? record.customFlag
+        : "globe";
+      const fallbackFlag = zoneId === "custom" ? customFlag : "uk";
+      const flag = isFlagKey(record.flag) ? record.flag : fallbackFlag;
+      return {
+        id: getString(record.id, makeFallbackId("slot")),
+        zoneId,
+        label: getString(record.label),
+        time: getString(record.time),
+        flag,
+        customLabel,
+        customTime,
+        customZone,
+        customEmoji,
+        customFlag,
+      };
+    };
+    const normalizeStream = (value: unknown): Stream => {
+      const record = isRecord(value) ? value : {};
+      return {
+        id: getString(record.id, makeFallbackId("stream")),
+        title: getString(record.title),
+        thumbUrl: getString(record.thumbUrl),
+        baseTime: getString(record.baseTime, "20:30"),
+        times: getArray<unknown>(record.times).map(normalizeSlot),
+      };
+    };
+    const normalizedDays = rawDays.map((value: unknown): StoryDay => {
+      const record = isRecord(value) ? value : {};
+      return {
+        id: getString(record.id, makeFallbackId("day")),
+        day: getString(record.day, "Day"),
+        date: getString(record.date),
+        off: getBoolean(record.off, false),
+        streams: getArray<unknown>(record.streams).map(normalizeStream),
+      };
+    });
+
+    const nextHeaderAlignment =
+      payload.headerAlignment === "center" || payload.headerAlignment === "left"
+        ? payload.headerAlignment
+        : headerAlignment;
+    const nextHeaderTone =
+      payload.headerTone === "soft" || payload.headerTone === "bright"
+        ? payload.headerTone
+        : headerTone;
+    const nextFooterStyle =
+      payload.footerStyle === "glass" || payload.footerStyle === "solid"
+        ? payload.footerStyle
+        : footerStyle;
+    const nextFooterSize =
+      payload.footerSize === "compact" || payload.footerSize === "regular"
+        ? payload.footerSize
+        : footerSize;
+    const nextExportSizeId =
+      typeof payload.exportSizeId === "string" &&
+      exportSizes.some((size) => size.id === payload.exportSizeId)
+        ? payload.exportSizeId
+        : exportSizeId;
+    const themeRecord = isRecord(payload.theme) ? payload.theme : {};
+    const nextThemeBackgroundId =
+      typeof themeRecord.backgroundId === "string" &&
+      themeBackgrounds.some((option) => option.id === themeRecord.backgroundId)
+        ? themeRecord.backgroundId
+        : themeBackgroundId;
+    const nextThemePaletteId =
+      typeof themeRecord.paletteId === "string" &&
+      themePalettes.some((option) => option.id === themeRecord.paletteId)
+        ? themeRecord.paletteId
+        : themePaletteId;
+    const nextThemeFontId =
+      typeof themeRecord.fontId === "string" &&
+      themeFonts.some((option) => option.id === themeRecord.fontId)
+        ? themeRecord.fontId
+        : themeFontId;
+    const nextThemeCardStyleId =
+      typeof themeRecord.cardStyleId === "string" &&
+      themeCardStyles.some((option) => option.id === themeRecord.cardStyleId)
+        ? themeRecord.cardStyleId
+        : themeCardStyleId;
+    const nextThemeBorderId =
+      typeof themeRecord.borderId === "string" &&
+      themeBorders.some((option) => option.id === themeRecord.borderId)
+        ? themeRecord.borderId
+        : themeBorderId;
+    const nextThemeBorderWeightId =
+      typeof themeRecord.borderWeightId === "string" &&
+      themeBorderWeights.some(
+        (option) => option.id === themeRecord.borderWeightId,
+      )
+        ? themeRecord.borderWeightId
+        : themeBorderWeightId;
+    return {
+      version: typeof payload.version === "number" ? payload.version : 1,
+      scheduleName: getString(payload.scheduleName, scheduleName),
+      scheduleTimeZone: getString(
+        payload.scheduleTimeZone,
+        scheduleTimeZone,
+      ),
+      exportSizeId: nextExportSizeId,
+      showHeader: getBoolean(payload.showHeader, showHeader),
+      headerTitle: getString(payload.headerTitle, headerTitle),
+      headerAlignment: nextHeaderAlignment,
+      headerTone: nextHeaderTone,
+      showFooter: getBoolean(payload.showFooter, showFooter),
+      footerLink: getString(payload.footerLink, footerLink),
+      footerStyle: nextFooterStyle,
+      footerSize: nextFooterSize,
+      theme: {
+        backgroundId: nextThemeBackgroundId,
+        paletteId: nextThemePaletteId,
+        fontId: nextThemeFontId,
+        cardStyleId: nextThemeCardStyleId,
+        borderId: nextThemeBorderId,
+        borderWeightId: nextThemeBorderWeightId,
+      },
+      days: normalizedDays,
+    };
+  };
+
+  const updateIdRefFromDays = (loadedDays: StoryDay[]) => {
+    let maxId = -1;
+    const collect = (id: string) => {
+      const next = getMaxIdValue(id);
+      if (next === null) return;
+      maxId = Math.max(maxId, next);
+    };
+    loadedDays.forEach((day) => {
+      collect(day.id);
+      day.streams.forEach((stream) => {
+        collect(stream.id);
+        stream.times.forEach((slot) => collect(slot.id));
+      });
+    });
+    if (maxId >= 0) {
+      idRef.current = Math.max(idRef.current, maxId + 1);
+    }
+  };
+
+  const handleScheduleSave = () => {
+    setScheduleFileError(null);
+    const payload: ScheduleFile = {
+      version: 2,
+      scheduleName,
+      scheduleTimeZone,
+      exportSizeId,
+      showHeader,
+      headerTitle,
+      headerAlignment,
+      headerTone,
+      showFooter,
+      footerLink,
+      footerStyle,
+      footerSize,
+      theme: {
+        backgroundId: themeBackgroundId,
+        paletteId: themePaletteId,
+        fontId: themeFontId,
+        cardStyleId: themeCardStyleId,
+        borderId: themeBorderId,
+        borderWeightId: themeBorderWeightId,
+      },
+      days,
+    };
+    const safeName = scheduleName
+      .trim()
+      .replace(/[^a-z0-9]+/gi, "-")
+      .replace(/^-+|-+$/g, "")
+      .toLowerCase();
+    const fileName = `${safeName || "schedule"}.schedule`;
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
+
+  const applyLoadedSchedule = (payload: ScheduleFile) => {
+    clearLocalThumbnails();
+    setScheduleName(payload.scheduleName);
+    setScheduleTimeZone(payload.scheduleTimeZone);
+    ensureTimeZoneOption(payload.scheduleTimeZone);
+    setExportSizeId(payload.exportSizeId);
+    setShowHeader(payload.showHeader);
+    setHeaderTitle(payload.headerTitle);
+    setHeaderAlignment(payload.headerAlignment);
+    setHeaderTone(payload.headerTone);
+    setShowFooter(payload.showFooter);
+    setFooterLink(payload.footerLink);
+    setFooterStyle(payload.footerStyle);
+    setFooterSize(payload.footerSize);
+    setThemeBackgroundId(payload.theme.backgroundId);
+    setThemePaletteId(payload.theme.paletteId);
+    setThemeFontId(payload.theme.fontId);
+    setThemeCardStyleId(payload.theme.cardStyleId);
+    setThemeBorderId(payload.theme.borderId);
+    setThemeBorderWeightId(payload.theme.borderWeightId);
+    setDays(payload.days);
+    const nextSelectedDayId = payload.days[0]?.id ?? null;
+    const nextSelectedStreamId = payload.days[0]?.streams[0]?.id ?? null;
+    setSelectedDayId(nextSelectedDayId);
+    setSelectedStreamId(nextSelectedStreamId);
+    setSelectedElement(
+      nextSelectedDayId ? { type: "day", id: nextSelectedDayId } : null,
+    );
+    setActiveEmojiPickerId(null);
+    setPendingDeleteDayId(null);
+    setPendingDeleteStream(null);
+    setPendingClearAll(false);
+    setIsDownloading(false);
+    setExportRequested(false);
+    setIsExportingView(false);
+    updateIdRefFromDays(payload.days);
+  };
+
+  const handleScheduleLoad = async (file: File) => {
+    setScheduleFileError(null);
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text) as unknown;
+      const normalized = normalizeScheduleFile(parsed);
+      if (!normalized) {
+        setScheduleFileError("Invalid schedule file.");
+        return;
+      }
+      applyLoadedSchedule(normalized);
+    } catch (error) {
+      console.error("Failed to load schedule file", error);
+      setScheduleFileError("Invalid schedule file.");
+    }
+  };
+
+  const handleScheduleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      void handleScheduleLoad(file);
+    }
+    event.currentTarget.value = "";
   };
 
   const handleDownload = () => {
@@ -1374,10 +2072,241 @@ export default function SchedulePage() {
                       ))}
                     </div>
                   </div>
+
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      Schedule file
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={handleScheduleSave}
+                        className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                      >
+                        Save .schedule
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => scheduleFileInputRef.current?.click()}
+                        className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                      >
+                        Load .schedule
+                      </button>
+                      <input
+                        ref={scheduleFileInputRef}
+                        type="file"
+                        accept=".schedule,application/json"
+                        onChange={handleScheduleFileChange}
+                        className="hidden"
+                      />
+                    </div>
+                    {scheduleFileError ? (
+                      <p className="text-xs text-red-600">
+                        {scheduleFileError}
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
               </div>
 
-                <div className="rounded-[28px] border border-slate-200 bg-white/85 p-6 shadow-[0_20px_50px_rgba(20,27,42,0.08)]">
+              <div className="rounded-[28px] border border-slate-200 bg-white/85 p-6 shadow-[0_20px_50px_rgba(20,27,42,0.08)]">
+                <h2 className="font-display text-xl text-slate-900">
+                  Theme studio
+                </h2>
+                <p className="mt-2 text-sm text-slate-600">
+                  Backgrounds, palettes, typography, and surfaces.
+                </p>
+                <div className="mt-4 space-y-4 text-sm text-slate-700">
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      Background
+                    </p>
+                    <div className="space-y-2">
+                      {themeBackgrounds.map((option) => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => setThemeBackgroundId(option.id)}
+                          aria-pressed={themeBackgroundId === option.id}
+                          className={`flex w-full items-center gap-3 rounded-2xl border bg-white px-3 py-2 text-left text-xs font-semibold transition ${
+                            themeBackgroundId === option.id
+                              ? "border-(--accent) text-slate-900"
+                              : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                          }`}
+                        >
+                          <span
+                            className="h-10 w-10 rounded-2xl border border-white/40 shadow-[0_0_0_1px_rgba(15,23,42,0.08)]"
+                            style={{
+                              backgroundImage: option.background,
+                              backgroundSize: "cover",
+                              backgroundPosition: "center",
+                            }}
+                          />
+                          <span>
+                            <span className="block text-sm font-semibold text-slate-900">
+                              {option.label}
+                            </span>
+                            <span className="block text-xs text-slate-500">
+                              {option.description}
+                            </span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      Palette
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {themePalettes.map((option) => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => setThemePaletteId(option.id)}
+                          aria-pressed={themePaletteId === option.id}
+                          className={`flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold transition ${
+                            themePaletteId === option.id
+                              ? "border-(--accent) text-slate-900"
+                              : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                          }`}
+                        >
+                          <span
+                            className="h-3.5 w-3.5 rounded-full"
+                            style={{ backgroundColor: option.accent }}
+                          />
+                          <span>{option.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      {selectedThemePalette?.description}
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      Font pairing
+                    </p>
+                    <div className="space-y-2">
+                      {themeFonts.map((option) => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => setThemeFontId(option.id)}
+                          aria-pressed={themeFontId === option.id}
+                          className={`flex w-full items-center justify-between rounded-2xl border bg-white px-3 py-2 text-left text-xs font-semibold transition ${
+                            themeFontId === option.id
+                              ? "border-(--accent) text-slate-900"
+                              : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                          }`}
+                        >
+                          <span>
+                            <span
+                              className="block text-sm font-semibold text-slate-900"
+                              style={{ fontFamily: option.heading }}
+                            >
+                              {option.label}
+                            </span>
+                            <span className="block text-xs text-slate-500">
+                              {option.description}
+                            </span>
+                          </span>
+                          <span className="text-xs text-slate-500">Aa</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      Card surface
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {themeCardStyles.map((option) => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => setThemeCardStyleId(option.id)}
+                          aria-pressed={themeCardStyleId === option.id}
+                          className={`flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold transition ${
+                            themeCardStyleId === option.id
+                              ? "border-(--accent) text-slate-900"
+                              : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                          }`}
+                        >
+                          <span
+                            className="h-4 w-4 rounded-md border border-slate-200"
+                            style={{ backgroundColor: option.surfaceStrong }}
+                          />
+                          <span>{option.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      Corners
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {themeBorders.map((option) => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => setThemeBorderId(option.id)}
+                          aria-pressed={themeBorderId === option.id}
+                          className={`flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold transition ${
+                            themeBorderId === option.id
+                              ? "border-(--accent) text-slate-900"
+                              : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                          }`}
+                        >
+                          <span
+                            className="h-4 w-4 border border-slate-300"
+                            style={{ borderRadius: option.cardRadius }}
+                          />
+                          <span>{option.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      {selectedThemeBorder?.description}
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      Border weight
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {themeBorderWeights.map((option) => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => setThemeBorderWeightId(option.id)}
+                          aria-pressed={themeBorderWeightId === option.id}
+                          className={`flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold transition ${
+                            themeBorderWeightId === option.id
+                              ? "border-(--accent) text-slate-900"
+                              : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                          }`}
+                        >
+                          <span
+                            className="h-3 w-8 rounded-full bg-slate-200"
+                            style={{ height: option.frameBorderWidth + 2 }}
+                          />
+                          <span>{option.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+
+              <div className="rounded-[28px] border border-slate-200 bg-white/85 p-6 shadow-[0_20px_50px_rgba(20,27,42,0.08)]">
                 <h2 className="font-display text-xl text-slate-900">
                   Elements menu
                 </h2>
@@ -1509,6 +2438,7 @@ export default function SchedulePage() {
                   footerLink={footerLink}
                   footerStyle={footerStyle}
                   footerSize={footerSize}
+                  theme={previewTheme}
                   exportRef={previewRef}
                 />
               </div>

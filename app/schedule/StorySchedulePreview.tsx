@@ -41,12 +41,12 @@ const LANDSCAPE_PILL_MIN_HEIGHT = 46;
 const LANDSCAPE_FLAG_WIDTH = 22;
 const LANDSCAPE_FLAG_HEIGHT = 16;
 
-const canvasBackground =
+const defaultCanvasBackground =
   "radial-gradient(820px 560px at 22% 14%, rgba(124,58,237,0.28), transparent 64%)," +
   "radial-gradient(820px 600px at 84% 22%, rgba(34,211,238,0.16), transparent 66%)," +
   "linear-gradient(180deg, rgb(9,7,24), rgb(11,7,34))";
 
-const thumbOverlay =
+const defaultThumbOverlay =
   "linear-gradient(135deg, rgba(124,58,237,0.16), rgba(34,211,238,0.1))";
 
 type FlagKey =
@@ -93,6 +93,44 @@ export type StoryDay = {
   streams: Stream[];
 };
 
+export type PreviewTheme = {
+  background: string;
+  thumbOverlay: string;
+  accent: string;
+  accentSoft: string;
+  accentGlow: string;
+  borderColor: string;
+  cardSurface: string;
+  cardSurfaceStrong: string;
+  frameRadius: number;
+  cardRadius: number;
+  frameBorderWidth: number;
+  cardBorderWidth: number;
+  bodyFont: string;
+  headingFont: string;
+  liveColor: string;
+  liveGlow: string;
+};
+
+const defaultPreviewTheme: PreviewTheme = {
+  background: defaultCanvasBackground,
+  thumbOverlay: defaultThumbOverlay,
+  accent: "#38bdf8",
+  accentSoft: "rgba(56,189,248,0.2)",
+  accentGlow: "rgba(56,189,248,0.85)",
+  borderColor: "rgba(255,255,255,0.2)",
+  cardSurface: "rgba(255,255,255,0.08)",
+  cardSurfaceStrong: "rgba(255,255,255,0.16)",
+  frameRadius: 38,
+  cardRadius: 28,
+  frameBorderWidth: 1,
+  cardBorderWidth: 1,
+  bodyFont: 'var(--font-space-grotesk), "Segoe UI", sans-serif',
+  headingFont: 'var(--font-fraunces), var(--font-space-grotesk), serif',
+  liveColor: "#ef4444",
+  liveGlow: "rgba(239,68,68,0.24)",
+};
+
 type StorySchedulePreviewProps = {
   days: StoryDay[];
   selectedDayId: string | null;
@@ -120,6 +158,7 @@ type StorySchedulePreviewProps = {
   footerLink: string;
   footerStyle: "solid" | "glass";
   footerSize: "regular" | "compact";
+  theme?: PreviewTheme;
   exportRef?: RefObject<HTMLDivElement>;
 };
 
@@ -335,6 +374,7 @@ export default function StorySchedulePreview({
   footerLink,
   footerStyle,
   footerSize,
+  theme,
   exportRef,
 }: StorySchedulePreviewProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -346,6 +386,28 @@ export default function StorySchedulePreview({
   >(null);
   const isLandscape = canvasWidth > canvasHeight;
   const canEdit = showAddControls && !isExporting;
+  const previewTheme = theme ?? defaultPreviewTheme;
+  const {
+    background,
+    thumbOverlay,
+    accent,
+    accentSoft,
+    accentGlow,
+    borderColor,
+    cardSurface,
+    cardSurfaceStrong,
+    frameRadius,
+    cardRadius,
+    frameBorderWidth,
+    cardBorderWidth,
+    bodyFont,
+    headingFont,
+    liveColor,
+    liveGlow,
+  } = previewTheme;
+  const dropIndicatorHorizontal = `linear-gradient(90deg, ${accentSoft}, ${accent}, ${accentSoft})`;
+  const dropIndicatorVertical = `linear-gradient(180deg, ${accentSoft}, ${accent}, ${accentSoft})`;
+  const dropIndicatorShadow = `0 0 0 1px ${accent}, 0 0 18px ${accentGlow}`;
 
   const handleDragStart = (event: DragEvent, dayId: string) => {
     if (!canEdit) return;
@@ -439,7 +501,7 @@ export default function StorySchedulePreview({
     return () => observer.disconnect();
   }, [canvasWidth, canvasHeight]);
 
-  const addDayButtonClass = `flex w-full items-center justify-center gap-3 rounded-3xl border-2 border-dashed font-semibold uppercase tracking-[0.24em] transition ${
+  const addDayButtonClass = `flex w-full items-center justify-center gap-3 rounded-3xl border border-dashed font-semibold uppercase tracking-[0.24em] transition ${
     canAddDay
       ? "border-white/30 bg-white/5 text-white/80 hover:border-white/60 hover:text-white"
       : "cursor-not-allowed border-white/15 bg-white/5 text-white/40"
@@ -513,6 +575,7 @@ export default function StorySchedulePreview({
     footerStyle === "solid"
       ? "border-white/25 bg-white/15"
       : "border-white/15 bg-white/5";
+  const footerSurface = footerStyle === "solid" ? cardSurfaceStrong : cardSurface;
   const footerScale = layoutScale;
   const footerMetrics =
     footerSize === "compact"
@@ -553,6 +616,21 @@ export default function StorySchedulePreview({
   const fitScale = baseListHeight > 0 ? availableHeight / baseListHeight : 1;
   const listScale = Math.min(1.3, countScale, fitScale);
   const scaledListHeight = baseListHeight * listScale;
+  const frameRadiusScaled = Math.max(12, frameRadius * layoutScale);
+  const frameBorderWidthScaled = Math.max(1, frameBorderWidth * layoutScale);
+  const cardRadiusScaled = Math.max(10, cardRadius * layoutScale * listScale);
+  const cardBorderWidthScaled = Math.max(
+    1,
+    cardBorderWidth * layoutScale * listScale,
+  );
+  const previewScaleComp = isExporting
+    ? 1
+    : Math.min(1.35, 1 / Math.max(scale, 0.7));
+  const shouldCompensateBorder = !isExporting && cardBorderWidthScaled <= 1.1;
+  const cardBorderWidthRender = shouldCompensateBorder
+    ? cardBorderWidthScaled * previewScaleComp
+    : cardBorderWidthScaled;
+  const dashedBorderWidth = Math.max(2, cardBorderWidthScaled);
   const scaleX = (value: number) =>
     Number((value * widthScale * listScale).toFixed(2));
   const scaleY = (value: number) =>
@@ -568,9 +646,9 @@ export default function StorySchedulePreview({
   const scaledOffDayCardHeight = offDayCardHeight * listScale;
   const scaledDayThumbWidth = dayCardThumbWidth * listScale;
   const scaledOffDayThumbWidth = offDayThumbWidth * listScale;
-  const portraitStreamBorderWidth = isExporting
-    ? 1
-    : Math.max(1, Math.round(1 / Math.max(scale, 0.2)));
+  const portraitStreamBorderWidth = Math.max(1, cardBorderWidthRender);
+  const useInsetGlow = cardBorderWidthScaled > 1.1;
+  const selectedCardGlowWidth = Math.max(cardBorderWidthScaled, scaleUnit(1));
 
   const landscapeWidthScale = canvasWidth / LANDSCAPE_WIDTH;
   const landscapeHeightScale = canvasHeight / LANDSCAPE_HEIGHT;
@@ -643,7 +721,24 @@ export default function StorySchedulePreview({
   const tileFont = (value: number) => Math.round(value * tileScale);
   const tilePadding = LANDSCAPE_TILE_PADDING * tileScale;
   const tileOffPadding = tilePadding * 0.7;
-  const tileRadius = LANDSCAPE_TILE_RADIUS * tileScale;
+  const tileRadius = Math.max(12, cardRadius * tileScale);
+  const landscapeFrameRadius = Math.max(12, frameRadius * landscapeScale);
+  const landscapeFrameBorderWidth = Math.max(
+    1,
+    frameBorderWidth * landscapeScale,
+  );
+  const landscapeCardBorderWidth = Math.max(1, cardBorderWidth * tileScale);
+  const shouldCompensateBorderLandscape =
+    !isExporting && landscapeCardBorderWidth <= 1.1;
+  const landscapeCardBorderWidthRender = shouldCompensateBorderLandscape
+    ? landscapeCardBorderWidth * previewScaleComp
+    : landscapeCardBorderWidth;
+  const dashedBorderWidthLandscape = Math.max(2, landscapeCardBorderWidth);
+  const useInsetGlowLandscape = landscapeCardBorderWidth > 1.1;
+  const selectedCardGlowWidthLandscape = Math.max(
+    landscapeCardBorderWidth,
+    tileUnit(1),
+  );
   const gridGap = 10 * tileScale;
   const addButtonHeightLandscape = 46 * landscapeScale;
   const addColumnWeight = Math.max(0.04, Math.min(0.08, 0.07 - dayCount * 0.004));
@@ -664,6 +759,8 @@ export default function StorySchedulePreview({
         padding: `${scaleY(24)}px ${scaleX(16)}px`,
         fontSize: scaleFont(13),
         gap: scaleUnit(12),
+        borderWidth: dashedBorderWidth,
+        borderColor: canAddDay ? borderColor : "rgba(255,255,255,0.18)",
       }}
     >
       <span className="font-black" style={{ fontSize: scaleFont(22) }}>
@@ -687,6 +784,8 @@ export default function StorySchedulePreview({
         padding: `${landscapeY(12)}px ${landscapeX(12)}px`,
         fontSize: landscapeFont(11),
         gap: landscapeUnit(8),
+        borderWidth: dashedBorderWidthLandscape,
+        borderColor: canAddDay ? borderColor : "rgba(255,255,255,0.18)",
       }}
     >
       <span className="font-black" style={{ fontSize: landscapeFont(16) }}>
@@ -715,10 +814,17 @@ export default function StorySchedulePreview({
             }}
           >
             <div
-              className={`relative h-full w-full overflow-hidden rounded-[38px] border border-white/10 text-white ${
+              className={`relative h-full w-full overflow-hidden border text-white ${
                 isExporting ? "shadow-none" : "shadow-[0_28px_85px_rgba(0,0,0,0.58)]"
               }`}
-              style={{ backgroundImage: canvasBackground }}
+              style={{
+                backgroundImage: background,
+                borderColor,
+                borderWidth: landscapeFrameBorderWidth,
+                borderStyle: "solid",
+                borderRadius: landscapeFrameRadius,
+                fontFamily: bodyFont,
+              }}
             >
               <div
                 className="absolute inset-0 flex flex-col"
@@ -733,19 +839,22 @@ export default function StorySchedulePreview({
                       type="button"
                       onClick={onSelectHeaderAction}
                       aria-pressed={isHeaderSelected}
-                      className={`w-full rounded-[20px] transition focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${
-                        isHeaderSelected
-                          ? "ring-2 ring-cyan-300/80 bg-white/5"
-                          : "ring-1 ring-transparent"
-                      }`}
+                      className="w-full transition focus-visible:outline focus-visible:outline-offset-2"
                       style={{
                         textAlign: headerAlign,
                         color: headerColor,
+                        borderRadius: Math.max(12, tileRadius * 0.7),
+                        outlineColor: accent,
+                        backgroundColor: isHeaderSelected ? cardSurface : "transparent",
+                        boxShadow: isHeaderSelected
+                          ? `0 0 0 ${landscapeUnit(1.5)}px ${accentGlow} inset`
+                          : `0 0 0 ${landscapeUnit(1)}px ${borderColor} inset`,
                       }}
                     >
                       <span
                         className="font-black leading-[1.05] tracking-[-0.02em] wrap-break-word"
                         style={{
+                          fontFamily: headingFont,
                           fontSize: landscapeHeaderFontSize,
                           lineHeight: landscapeHeaderLineHeight,
                           paddingBottom: landscapeHeaderPadding,
@@ -768,7 +877,7 @@ export default function StorySchedulePreview({
                   {days.length === 0 ? (
                     <div className="flex flex-col" style={{ gap: landscapeGap }}>
                       <div
-                        className="rounded-[20px] border border-dashed border-white/20 bg-white/5 text-center text-sm text-white/70"
+                        className="rounded-[20px] border border-white/20 bg-white/5 text-center text-sm text-white/70"
                         style={{
                           padding: `${landscapeY(32)}px ${landscapeX(24)}px`,
                           fontSize: landscapeFont(13),
@@ -882,10 +991,8 @@ export default function StorySchedulePreview({
                                           : "auto",
                                       width: tileUnit(4),
                                       borderRadius: tileUnit(4),
-                                      background:
-                                        "linear-gradient(180deg, rgba(251,191,36,0.1), rgba(251,191,36,0.9), rgba(251,191,36,0.1))",
-                                      boxShadow:
-                                        "0 0 0 1px rgba(251,191,36,0.65), 0 0 18px rgba(251,191,36,0.45)",
+                                      background: dropIndicatorVertical,
+                                      boxShadow: dropIndicatorShadow,
                                       zIndex: 15,
                                     }}
                                   />
@@ -904,30 +1011,31 @@ export default function StorySchedulePreview({
                                   onDrop={(event) => handleDrop(event, day.id, "x")}
                                   onDragEnd={handleDragEnd}
                                   aria-pressed={isSelected}
-                                  className={`relative flex min-h-0 w-full flex-1 flex-col border text-left transition focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${
-                                    isSelected
-                                      ? "border-cyan-300/80"
-                                      : "border-white/20"
-                                  } ${day.off ? "border-2 border-dashed" : ""} ${
+                                  className={`relative flex min-h-0 w-full flex-1 flex-col border text-left transition focus-visible:outline focus-visible:outline-offset-2 ${
                                     canEdit
                                       ? "cursor-grab active:cursor-grabbing"
                                       : ""
                                   }`}
                                   style={{
                                     borderRadius: tileRadius,
+                                    borderColor: isSelected ? accent : borderColor,
+                                    borderWidth: landscapeCardBorderWidthRender,
+                                    borderStyle: "solid",
+                                    outlineColor: accent,
                                     padding: tilePadding,
-                                    backgroundColor: "rgba(255,255,255,0.06)",
+                                    backgroundColor: cardSurface,
                                     backgroundImage,
                                     backgroundSize: "cover",
                                     backgroundPosition: "center",
                                     backgroundBlendMode: "screen, normal, normal",
-                                    boxShadow: isSelected
-                                      ? `0 0 0 ${tileUnit(2)}px rgba(56,189,248,0.85) inset`
-                                      : "none",
+                                    boxShadow:
+                                      isSelected && useInsetGlowLandscape
+                                        ? `0 0 0 ${selectedCardGlowWidthLandscape}px ${accentGlow} inset`
+                                        : "none",
                                     outline: isDragOver
-                                      ? `${tileUnit(1.5)}px solid rgba(251,191,36,0.7)`
+                                      ? `${tileUnit(1.5)}px solid ${accentGlow}`
                                       : "none",
-                                    outlineOffset: tileUnit(2),
+                                    outlineOffset: isDragOver ? tileUnit(2) : 0,
                                     opacity: isDragging ? 0.6 : 1,
                                   }}
                                 >
@@ -956,14 +1064,17 @@ export default function StorySchedulePreview({
                                           fontSize: tileFont(LANDSCAPE_LIVE_SIZE),
                                         }}
                                       >
-                                        <span
-                                          className="rounded-full bg-red-500"
-                                          style={{
-                                            width: tileUnit(9),
-                                            height: tileUnit(9),
-                                            boxShadow: `0 0 0 ${tileUnit(6)}px rgba(255,45,45,0.16)`,
-                                          }}
-                                        />
+                                    <span
+                                      className="rounded-full"
+                                      style={{
+                                        width: tileUnit(9),
+                                        height: tileUnit(9),
+                                        backgroundColor: liveColor,
+                                        boxShadow: `0 0 0 ${tileUnit(
+                                          6,
+                                        )}px ${liveGlow}`,
+                                      }}
+                                    />
                                         <span>Live</span>
                                       </div>
                                       <div
@@ -991,6 +1102,7 @@ export default function StorySchedulePreview({
                                     <div
                                       className="font-black leading-[1.18] tracking-[-0.01em]"
                                       style={{
+                                        fontFamily: headingFont,
                                         fontSize: tileFont(LANDSCAPE_TITLE_SIZE),
                                         display: "-webkit-box",
                                         WebkitLineClamp: 2,
@@ -1007,7 +1119,7 @@ export default function StorySchedulePreview({
                                     >
                                       {primaryStream.times.length === 0 ? (
                                         <div
-                                          className="w-full rounded-2xl border border-dashed border-white/20 bg-white/5 font-semibold uppercase tracking-[0.14em] text-white/70"
+                                          className="w-full rounded-2xl border border-white/20 bg-white/5 font-semibold uppercase tracking-[0.14em] text-white/70"
                                           style={{
                                             minHeight:
                                               LANDSCAPE_PILL_MIN_HEIGHT *
@@ -1181,10 +1293,8 @@ export default function StorySchedulePreview({
                                         : "auto",
                                     width: tileUnit(4),
                                     borderRadius: tileUnit(4),
-                                    background:
-                                      "linear-gradient(180deg, rgba(251,191,36,0.1), rgba(251,191,36,0.9), rgba(251,191,36,0.1))",
-                                    boxShadow:
-                                      "0 0 0 1px rgba(251,191,36,0.65), 0 0 18px rgba(251,191,36,0.45)",
+                                      background: dropIndicatorVertical,
+                                      boxShadow: dropIndicatorShadow,
                                     zIndex: 15,
                                   }}
                                 />
@@ -1201,26 +1311,29 @@ export default function StorySchedulePreview({
                                 onDrop={(event) => handleDrop(event, day.id, "x")}
                                 onDragEnd={handleDragEnd}
                                 aria-pressed={isSelected}
-                                className={`relative flex min-h-0 w-full flex-1 flex-col border text-left transition focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${
-                                  isSelected
-                                    ? "border-cyan-300/80"
-                                    : "border-white/20"
-                                } ${day.off ? "border-2 border-dashed" : ""} ${
+                                className={`relative flex min-h-0 w-full flex-1 flex-col border text-left transition focus-visible:outline focus-visible:outline-offset-2 ${
                                   canEdit ? "cursor-grab active:cursor-grabbing" : ""
                                 }`}
                                 style={{
                                   borderRadius: tileRadius,
+                                  borderColor: isSelected ? accent : borderColor,
+                                  borderWidth: day.off
+                                    ? dashedBorderWidthLandscape
+                                    : landscapeCardBorderWidthRender,
+                                  borderStyle: day.off ? "dashed" : "solid",
+                                  outlineColor: accent,
                                   padding: day.off ? tileOffPadding : tilePadding,
                                   backgroundColor: day.off
-                                    ? "rgba(255,255,255,0.04)"
-                                    : "rgba(255,255,255,0.06)",
-                                  boxShadow: isSelected
-                                    ? `0 0 0 ${tileUnit(2)}px rgba(56,189,248,0.85) inset`
-                                    : "none",
+                                    ? cardSurfaceStrong
+                                    : cardSurface,
+                                  boxShadow:
+                                    isSelected && useInsetGlowLandscape
+                                      ? `0 0 0 ${selectedCardGlowWidthLandscape}px ${accentGlow} inset`
+                                      : "none",
                                   outline: isDragOver
-                                    ? `${tileUnit(1.5)}px solid rgba(251,191,36,0.7)`
+                                    ? `${tileUnit(1.5)}px solid ${accentGlow}`
                                     : "none",
-                                  outlineOffset: tileUnit(2),
+                                  outlineOffset: isDragOver ? tileUnit(2) : 0,
                                   opacity: isDragging ? 0.6 : 1,
                                 }}
                               >
@@ -1257,11 +1370,14 @@ export default function StorySchedulePreview({
                                       }}
                                     >
                                       <span
-                                        className="rounded-full bg-red-500"
+                                        className="rounded-full"
                                         style={{
                                           width: tileUnit(9),
                                           height: tileUnit(9),
-                                          boxShadow: `0 0 0 ${tileUnit(6)}px rgba(255,45,45,0.16)`,
+                                          backgroundColor: liveColor,
+                                          boxShadow: `0 0 0 ${tileUnit(
+                                            6,
+                                          )}px ${liveGlow}`,
                                         }}
                                       />
                                       <span>Live</span>
@@ -1293,12 +1409,14 @@ export default function StorySchedulePreview({
                                 >
                                   {day.streams.length === 0 ? (
                                     <div
-                                      className="w-full rounded-2xl border border-dashed border-white/20 bg-white/5 font-semibold uppercase tracking-[0.14em] text-white/70"
+                                      className="w-full rounded-2xl border border-dashed bg-white/5 font-semibold uppercase tracking-[0.14em] text-white/70"
                                       style={{
                                         minHeight:
                                           LANDSCAPE_PILL_MIN_HEIGHT * tileScale,
                                         padding: `${streamUnit(8)}px ${streamUnit(10)}px`,
                                         fontSize: streamFont(10),
+                                        borderColor,
+                                        borderWidth: dashedBorderWidthLandscape,
                                       }}
                                     >
                                       Add stream
@@ -1365,7 +1483,7 @@ export default function StorySchedulePreview({
                                           >
                                             {stream.times.length === 0 ? (
                                               <div
-                                                className="w-full rounded-[14px] border border-dashed border-white/20 bg-white/5 font-semibold uppercase tracking-[0.14em] text-white/70"
+                                                className="w-full rounded-[14px] border border-white/20 bg-white/5 font-semibold uppercase tracking-[0.14em] text-white/70"
                                                 style={{
                                                   minHeight:
                                                     LANDSCAPE_PILL_MIN_HEIGHT *
@@ -1544,23 +1662,28 @@ export default function StorySchedulePreview({
                       type="button"
                       onClick={onSelectFooterAction}
                       aria-pressed={isFooterSelected}
-                      className={`inline-flex items-center rounded-full font-black leading-none tracking-[0.02em] text-white/95 transition focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${footerClass}`}
+                      className={`inline-flex items-center rounded-full font-black leading-none tracking-[0.02em] text-white/95 transition focus-visible:outline focus-visible:outline-offset-2 ${footerClass}`}
                       style={{
                         minHeight: landscapeFooterHeight,
                         padding: `${landscapeFooterMetrics.paddingY}px ${landscapeFooterMetrics.paddingX}px`,
                         fontSize: landscapeFooterMetrics.fontSize,
                         gap: landscapeFooterMetrics.gap,
+                        outlineColor: accent,
+                        backgroundColor: footerSurface,
+                        borderColor,
+                        fontFamily: headingFont,
                         boxShadow: isFooterSelected
-                          ? `0 0 0 ${landscapeUnit(1.5)}px rgba(56,189,248,0.85) inset`
-                          : `0 0 0 ${landscapeUnit(1)}px rgba(255,255,255,0.24) inset`,
+                          ? `0 0 0 ${landscapeUnit(1.5)}px ${accentGlow} inset`
+                          : `0 0 0 ${landscapeUnit(1)}px ${borderColor} inset`,
                       }}
                     >
                       <span
-                        className="rounded-full bg-red-500"
+                        className="rounded-full"
                         style={{
                           width: landscapeFooterMetrics.dotSize,
                           height: landscapeFooterMetrics.dotSize,
-                          boxShadow: `0 0 0 ${landscapeFooterMetrics.dotShadow}px rgba(255,45,45,0.16)`,
+                          backgroundColor: liveColor,
+                          boxShadow: `0 0 0 ${landscapeFooterMetrics.dotShadow}px ${liveGlow}`,
                         }}
                       />
                       {footerLink || "twitch.tv/yourname"}
@@ -1594,10 +1717,17 @@ export default function StorySchedulePreview({
           }}
         >
           <div
-            className={`relative h-full w-full overflow-hidden rounded-[38px] border border-white/10 text-white ${
+            className={`relative h-full w-full overflow-hidden border text-white ${
               isExporting ? "shadow-none" : "shadow-[0_28px_85px_rgba(0,0,0,0.58)]"
             }`}
-            style={{ backgroundImage: canvasBackground }}
+            style={{
+              backgroundImage: background,
+              borderColor,
+              borderWidth: frameBorderWidthScaled,
+              borderStyle: "solid",
+              borderRadius: frameRadiusScaled,
+              fontFamily: bodyFont,
+            }}
           >
             <div
               className="absolute inset-0 flex flex-col justify-center"
@@ -1617,19 +1747,22 @@ export default function StorySchedulePreview({
                     type="button"
                     onClick={onSelectHeaderAction}
                     aria-pressed={isHeaderSelected}
-                    className={`w-full rounded-3xl transition focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${
-                      isHeaderSelected
-                        ? "ring-2 ring-cyan-300/80 bg-white/5"
-                        : "ring-1 ring-transparent"
-                    }`}
+                    className="w-full transition focus-visible:outline focus-visible:outline-offset-2"
                     style={{
                       textAlign: headerAlign,
                       color: headerColor,
+                      borderRadius: Math.max(12, cardRadiusScaled * 0.8),
+                      outlineColor: accent,
+                      backgroundColor: isHeaderSelected ? cardSurface : "transparent",
+                      boxShadow: isHeaderSelected
+                        ? `0 0 0 ${scaleUnit(2)}px ${accentGlow} inset`
+                        : `0 0 0 ${scaleUnit(1)}px ${borderColor} inset`,
                     }}
                   >
                     <span
                       className="text-[56px] font-black leading-[1.05] tracking-[-0.02em] wrap-break-word"
                       style={{
+                        fontFamily: headingFont,
                         fontSize: headerFontSize,
                         lineHeight: headerLineHeight,
                         paddingBottom: headerPadding,
@@ -1655,7 +1788,7 @@ export default function StorySchedulePreview({
                   {days.length === 0 ? (
                     <div className="flex flex-col" style={{ gap: scaledGap }}>
                       <div
-                        className="rounded-[28px] border border-dashed border-white/20 bg-white/5 px-6 py-10 text-center text-sm text-white/70"
+                        className="rounded-[28px] border border-white/20 bg-white/5 px-6 py-10 text-center text-sm text-white/70"
                         style={{
                           height: scaledEmptyStateHeight,
                           padding: `${scaleY(40)}px ${scaleX(24)}px`,
@@ -1704,10 +1837,8 @@ export default function StorySchedulePreview({
                                     : "auto",
                                 height: scaleUnit(4),
                                 borderRadius: scaleUnit(4),
-                                background:
-                                  "linear-gradient(90deg, rgba(251,191,36,0.1), rgba(251,191,36,0.9), rgba(251,191,36,0.1))",
-                                boxShadow:
-                                  "0 0 0 1px rgba(251,191,36,0.65), 0 0 18px rgba(251,191,36,0.45)",
+                                background: dropIndicatorHorizontal,
+                                boxShadow: dropIndicatorShadow,
                                 zIndex: 12,
                               }}
                             />
@@ -1724,7 +1855,7 @@ export default function StorySchedulePreview({
                             onDrop={(event) => handleDrop(event, day.id, "y")}
                             onDragEnd={handleDragEnd}
                             aria-pressed={isSelected}
-                            className={`grid h-35 w-full grid-cols-[220px_1fr] gap-4.5 rounded-[28px] border-2 border-dashed border-white/30 bg-white/5 p-4 text-left backdrop-blur-[10px] transition focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${
+                            className={`grid h-35 w-full grid-cols-[220px_1fr] gap-4.5 border p-4 text-left backdrop-blur-[10px] transition focus-visible:outline focus-visible:outline-offset-2 ${
                               canEdit ? "cursor-grab active:cursor-grabbing" : ""
                             }`}
                             style={{
@@ -1732,23 +1863,29 @@ export default function StorySchedulePreview({
                               gridTemplateColumns: `${scaledOffDayThumbWidth}px 1fr`,
                               gap: scaleUnit(18),
                               padding: `${scaleY(16)}px ${scaleX(16)}px`,
-                              boxShadow: isSelected
-                                ? `0 0 0 ${scaleUnit(2)}px rgba(56,189,248,0.85) inset`
-                                : "none",
+                              borderRadius: cardRadiusScaled,
+                              borderColor,
+                              borderWidth: dashedBorderWidth,
+                              borderStyle: "dashed",
+                              backgroundColor: cardSurfaceStrong,
+                              outlineColor: accent,
+                              boxShadow:
+                                isSelected && useInsetGlow
+                                  ? `0 0 0 ${selectedCardGlowWidth}px ${accentGlow} inset`
+                                  : "none",
                               outline: isDragOver
-                                ? `${scaleUnit(1.5)}px solid rgba(251,191,36,0.7)`
+                                ? `${scaleUnit(1.5)}px solid ${accentGlow}`
                                 : "none",
-                              outlineOffset: scaleUnit(2),
+                              outlineOffset: isDragOver ? scaleUnit(2) : 0,
                               opacity: isDragging ? 0.6 : 1,
                             }}
                           >
                             <div
                               className="relative aspect-video w-full max-h-full self-center overflow-hidden rounded-[18px]"
                               style={{
-                                backgroundImage:
-                                  "linear-gradient(135deg, rgba(124,58,237,0.1), rgba(34,211,238,0.06))",
+                                backgroundImage: thumbOverlay,
                                 backgroundColor: "rgba(0,0,0,0.18)",
-                                boxShadow: `0 0 0 ${scaleUnit(1)}px rgba(255,255,255,0.18) inset`,
+                                boxShadow: `0 0 0 ${scaleUnit(1)}px ${borderColor} inset`,
                               }}
                             />
                             <div
@@ -1853,10 +1990,8 @@ export default function StorySchedulePreview({
                                     : "auto",
                                 height: scaleUnit(4),
                                 borderRadius: scaleUnit(4),
-                                background:
-                                  "linear-gradient(90deg, rgba(251,191,36,0.1), rgba(251,191,36,0.9), rgba(251,191,36,0.1))",
-                                boxShadow:
-                                  "0 0 0 1px rgba(251,191,36,0.65), 0 0 18px rgba(251,191,36,0.45)",
+                                background: dropIndicatorHorizontal,
+                                boxShadow: dropIndicatorShadow,
                                 zIndex: 12,
                               }}
                             />
@@ -1873,7 +2008,7 @@ export default function StorySchedulePreview({
                             onDrop={(event) => handleDrop(event, day.id, "y")}
                             onDragEnd={handleDragEnd}
                             aria-pressed={isSelected}
-                            className={`grid h-62.5 w-full grid-cols-[260px_1fr] gap-5 rounded-[28px] bg-white/10 p-5 text-left backdrop-blur-[10px] transition focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${
+                            className={`grid h-62.5 w-full grid-cols-[260px_1fr] gap-5 border p-5 text-left backdrop-blur-[10px] transition focus-visible:outline focus-visible:outline-offset-2 ${
                               canEdit ? "cursor-grab active:cursor-grabbing" : ""
                             }`}
                             style={{
@@ -1881,13 +2016,20 @@ export default function StorySchedulePreview({
                               gridTemplateColumns: `${scaledDayThumbWidth}px 1fr`,
                               gap: scaleUnit(20),
                               padding: `${scaleY(20)}px ${scaleX(20)}px`,
-                              boxShadow: isSelected
-                                ? `0 0 0 ${scaleUnit(2)}px rgba(56,189,248,0.85) inset`
-                                : `0 0 0 ${scaleUnit(1.5)}px rgba(255,255,255,0.18) inset`,
+                              borderRadius: cardRadiusScaled,
+                              borderColor: isSelected ? accent : borderColor,
+                              borderWidth: cardBorderWidthRender,
+                              borderStyle: "solid",
+                              backgroundColor: cardSurface,
+                              outlineColor: accent,
+                              boxShadow:
+                                isSelected && useInsetGlow
+                                  ? `0 0 0 ${selectedCardGlowWidth}px ${accentGlow} inset`
+                                  : "none",
                               outline: isDragOver
-                                ? `${scaleUnit(1.5)}px solid rgba(251,191,36,0.7)`
+                                ? `${scaleUnit(1.5)}px solid ${accentGlow}`
                                 : "none",
-                              outlineOffset: scaleUnit(2),
+                              outlineOffset: isDragOver ? scaleUnit(2) : 0,
                               opacity: isDragging ? 0.6 : 1,
                             }}
                           >
@@ -1899,7 +2041,7 @@ export default function StorySchedulePreview({
                                 backgroundSize: "cover",
                                 backgroundPosition: "center",
                                 backgroundBlendMode: "screen, normal",
-                                boxShadow: `0 0 0 ${scaleUnit(1)}px rgba(255,255,255,0.18) inset`,
+                                boxShadow: `0 0 0 ${scaleUnit(1)}px ${borderColor} inset`,
                               }}
                             >
                               <div
@@ -1914,10 +2056,14 @@ export default function StorySchedulePreview({
                                 }}
                               >
                                 <span
-                                  className="h-2.5 w-2.5 rounded-full bg-red-500 shadow-[0_0_0_6px_rgba(255,45,45,0.18)]"
+                                  className="h-2.5 w-2.5 rounded-full"
                                   style={{
                                     width: scaleUnit(10),
                                     height: scaleUnit(10),
+                                    backgroundColor: liveColor,
+                                    boxShadow: `0 0 0 ${scaleUnit(
+                                      6,
+                                    )}px ${liveGlow}`,
                                   }}
                                 />
                                 <span>Live</span>
@@ -1945,6 +2091,7 @@ export default function StorySchedulePreview({
                               <div
                                 className="text-[38px] font-black leading-[1.12] tracking-[-0.02em]"
                                 style={{
+                                  fontFamily: headingFont,
                                   fontSize: scaleFont(38),
                                   lineHeight: 1.24,
                                   display: "-webkit-box",
@@ -2098,10 +2245,8 @@ export default function StorySchedulePreview({
                                   : "auto",
                               height: scaleUnit(4),
                               borderRadius: scaleUnit(4),
-                              background:
-                                "linear-gradient(90deg, rgba(251,191,36,0.1), rgba(251,191,36,0.9), rgba(251,191,36,0.1))",
-                              boxShadow:
-                                "0 0 0 1px rgba(251,191,36,0.65), 0 0 18px rgba(251,191,36,0.45)",
+                              background: dropIndicatorHorizontal,
+                              boxShadow: dropIndicatorShadow,
                               zIndex: 12,
                             }}
                           />
@@ -2118,20 +2263,27 @@ export default function StorySchedulePreview({
                           onDrop={(event) => handleDrop(event, day.id, "y")}
                           onDragEnd={handleDragEnd}
                           aria-pressed={isSelected}
-                          className={`flex min-h-0 h-62.5 w-full flex-col rounded-[28px] bg-white/10 p-5 text-left backdrop-blur-[10px] transition focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${
+                          className={`flex min-h-0 h-62.5 w-full flex-col border p-5 text-left backdrop-blur-[10px] transition focus-visible:outline focus-visible:outline-offset-2 ${
                             canEdit ? "cursor-grab active:cursor-grabbing" : ""
                           }`}
                           style={{
                             height: scaledDayCardHeight,
                             gap: scaleUnit(12),
                             padding: `${scaleY(18)}px ${scaleX(18)}px`,
-                            boxShadow: isSelected
-                              ? `0 0 0 ${scaleUnit(2)}px rgba(56,189,248,0.85) inset`
-                              : `0 0 0 ${scaleUnit(1.5)}px rgba(255,255,255,0.18) inset`,
+                            borderRadius: cardRadiusScaled,
+                            borderColor: isSelected ? accent : borderColor,
+                            borderWidth: cardBorderWidthRender,
+                            borderStyle: "solid",
+                            backgroundColor: cardSurface,
+                            outlineColor: accent,
+                            boxShadow:
+                              isSelected && useInsetGlow
+                                ? `0 0 0 ${selectedCardGlowWidth}px ${accentGlow} inset`
+                                : "none",
                             outline: isDragOver
-                              ? `${scaleUnit(1.5)}px solid rgba(251,191,36,0.7)`
+                              ? `${scaleUnit(1.5)}px solid ${accentGlow}`
                               : "none",
-                            outlineOffset: scaleUnit(2),
+                            outlineOffset: isDragOver ? scaleUnit(2) : 0,
                             opacity: isDragging ? 0.6 : 1,
                           }}
                         >
@@ -2159,12 +2311,15 @@ export default function StorySchedulePreview({
                         >
                           {day.streams.length === 0 ? (
                             <div
-                              className="flex min-h-0 flex-1 items-center justify-center rounded-[20px] border border-dashed border-white/20 bg-white/5 text-[12px] font-semibold uppercase tracking-[0.2em] text-white/70"
+                              className="flex min-h-0 flex-1 items-center justify-center rounded-[20px] border border-dashed text-[12px] font-semibold uppercase tracking-[0.2em] text-white/70"
                               style={{
                                 fontSize: Math.max(
                                   10,
                                   Math.round(scaleFont(12) * streamScale),
                                 ),
+                                borderColor,
+                                borderWidth: dashedBorderWidth,
+                                backgroundColor: cardSurface,
                               }}
                             >
                               Add stream
@@ -2210,7 +2365,7 @@ export default function StorySchedulePreview({
                               return (
                                 <div
                                   key={stream.id}
-                                  className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/15 bg-white/10 text-white/95"
+                                  className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border text-white/95"
                                   style={{
                                     gap: scaleUnit(8) * streamScale,
                                     padding: `${scaleY(12) * streamScale}px ${
@@ -2221,16 +2376,23 @@ export default function StorySchedulePreview({
                                     backgroundPosition: "center",
                                     backgroundBlendMode:
                                       "screen, normal, normal",
-                                    borderWidth: portraitStreamBorderWidth,
+                                    backgroundColor: cardSurfaceStrong,
+                                    borderColor,
+                                    borderWidth: Math.max(
+                                      portraitStreamBorderWidth,
+                                      cardBorderWidthRender,
+                                    ),
+                                    borderStyle: "solid",
                                   }}
                                 >
-                                  <div
-                                    className="font-black leading-[1.12] tracking-[-0.02em]"
-                                    style={{
-                                      fontSize: streamTitleFont,
-                                      display: "-webkit-box",
-                                      WebkitLineClamp: 2,
-                                      WebkitBoxOrient: "vertical",
+                                      <div
+                                        className="font-black leading-[1.12] tracking-[-0.02em]"
+                                        style={{
+                                          fontFamily: headingFont,
+                                          fontSize: streamTitleFont,
+                                          display: "-webkit-box",
+                                          WebkitLineClamp: 2,
+                                          WebkitBoxOrient: "vertical",
                                       overflow: "hidden",
                                       wordBreak: "break-word",
                                     }}
@@ -2369,23 +2531,28 @@ export default function StorySchedulePreview({
                       type="button"
                       onClick={onSelectFooterAction}
                       aria-pressed={isFooterSelected}
-                      className={`inline-flex items-center rounded-full text-[38px] font-black leading-none tracking-[0.02em] text-white/95 transition focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${footerClass}`}
+                      className={`inline-flex items-center rounded-full text-[38px] font-black leading-none tracking-[0.02em] text-white/95 transition focus-visible:outline focus-visible:outline-offset-2 ${footerClass}`}
                       style={{
                         minHeight: footerHeight,
                         padding: `${footerMetrics.paddingY}px ${footerMetrics.paddingX}px`,
                         fontSize: footerMetrics.fontSize,
                         gap: footerMetrics.gap,
+                        outlineColor: accent,
+                        backgroundColor: footerSurface,
+                        borderColor,
+                        fontFamily: headingFont,
                         boxShadow: isFooterSelected
-                          ? `0 0 0 ${scaleUnit(2)}px rgba(56,189,248,0.85) inset`
-                          : `0 0 0 ${scaleUnit(1)}px rgba(255,255,255,0.24) inset`,
+                          ? `0 0 0 ${scaleUnit(2)}px ${accentGlow} inset`
+                          : `0 0 0 ${scaleUnit(1)}px ${borderColor} inset`,
                       }}
                     >
                     <span
-                      className="rounded-full bg-red-500"
+                      className="rounded-full"
                       style={{
                         width: footerMetrics.dotSize,
                         height: footerMetrics.dotSize,
-                        boxShadow: `0 0 0 ${footerMetrics.dotShadow}px rgba(255,45,45,0.16)`,
+                        backgroundColor: liveColor,
+                        boxShadow: `0 0 0 ${footerMetrics.dotShadow}px ${liveGlow}`,
                       }}
                     />
                     {footerLink || "twitch.tv/yourname"}
