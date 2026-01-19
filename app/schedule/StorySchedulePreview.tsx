@@ -956,16 +956,17 @@ export default function StorySchedulePreview({
                       type="button"
                       onClick={onSelectHeaderAction}
                       aria-pressed={isHeaderSelected}
-                      className="w-full transition focus-visible:outline focus-visible:outline-offset-2"
+                      className="w-full transition"
                       style={{
                         textAlign: headerAlign,
                         color: headerColor,
                         borderRadius: Math.max(12, tileRadius * 0.7),
-                        outlineColor: accent,
                         backgroundColor: isHeaderSelected ? cardSurface : "transparent",
                         boxShadow: isHeaderSelected
                           ? `0 0 0 ${landscapeUnit(1.5)}px ${accentGlow} inset`
-                          : `0 0 0 ${landscapeUnit(1)}px ${borderColor} inset`,
+                          : canEdit
+                            ? `0 0 0 ${landscapeUnit(1)}px ${borderColor} inset`
+                            : "none",
                       }}
                     >
                       <span
@@ -1138,7 +1139,7 @@ export default function StorySchedulePreview({
                                     borderColor: isSelected ? accent : borderColor,
                                     borderWidth: landscapeCardBorderWidthRender,
                                     borderStyle: "solid",
-                                    outlineColor: accent,
+                                    outlineColor: isDragOver ? accentGlow : accent,
                                     padding: tilePadding,
                                     backgroundColor: cardSurface,
                                     backgroundImage,
@@ -1149,9 +1150,10 @@ export default function StorySchedulePreview({
                                       isSelected && useInsetGlowLandscape
                                         ? `0 0 0 ${selectedCardGlowWidthLandscape}px ${accentGlow} inset`
                                         : "none",
-                                    outline: isDragOver
-                                      ? `${tileUnit(1.5)}px solid ${accentGlow}`
-                                      : "none",
+                                    outlineWidth: isDragOver
+                                      ? tileUnit(1.5)
+                                      : undefined,
+                                    outlineStyle: isDragOver ? "solid" : undefined,
                                     outlineOffset: isDragOver ? tileUnit(2) : 0,
                                     opacity: isDragging ? 0.6 : 1,
                                   }}
@@ -1324,7 +1326,7 @@ export default function StorySchedulePreview({
                                                   {slot.label}
                                                 </span>
                                                 <span
-                                                  className="font-black"
+                                                  className="font-black whitespace-nowrap"
                                                   style={{
                                                     marginLeft: "auto",
                                                     fontSize: Math.max(
@@ -1438,7 +1440,7 @@ export default function StorySchedulePreview({
                                     ? dashedBorderWidthLandscape
                                     : landscapeCardBorderWidthRender,
                                   borderStyle: day.off ? "dashed" : "solid",
-                                  outlineColor: accent,
+                                  outlineColor: isDragOver ? accentGlow : accent,
                                   padding: day.off ? tileOffPadding : tilePadding,
                                   backgroundColor: day.off
                                     ? cardSurfaceStrong
@@ -1447,9 +1449,10 @@ export default function StorySchedulePreview({
                                     isSelected && useInsetGlowLandscape
                                       ? `0 0 0 ${selectedCardGlowWidthLandscape}px ${accentGlow} inset`
                                       : "none",
-                                  outline: isDragOver
-                                    ? `${tileUnit(1.5)}px solid ${accentGlow}`
-                                    : "none",
+                                  outlineWidth: isDragOver
+                                    ? tileUnit(1.5)
+                                    : undefined,
+                                  outlineStyle: isDragOver ? "solid" : undefined,
                                   outlineOffset: isDragOver ? tileUnit(2) : 0,
                                   opacity: isDragging ? 0.6 : 1,
                                 }}
@@ -1637,9 +1640,13 @@ export default function StorySchedulePreview({
                                               backgroundPosition: "center",
                                               backgroundBlendMode:
                                                 "screen, normal, normal",
-                                              outline: isStreamDragOver
-                                                ? `${tileUnit(1.5)}px solid ${accentGlow}`
-                                                : "none",
+                                              outlineColor: accentGlow,
+                                              outlineWidth: isStreamDragOver
+                                                ? tileUnit(1.5)
+                                                : undefined,
+                                              outlineStyle: isStreamDragOver
+                                                ? "solid"
+                                                : undefined,
                                               outlineOffset: isStreamDragOver
                                                 ? tileUnit(2)
                                                 : 0,
@@ -1757,7 +1764,7 @@ export default function StorySchedulePreview({
                                                         {slot.label}
                                                       </span>
                                                       <span
-                                                        className="font-black"
+                                                        className="font-black whitespace-nowrap"
                                                         style={{
                                                           marginLeft: "auto",
                                                           fontSize: Math.max(
@@ -1932,16 +1939,17 @@ export default function StorySchedulePreview({
                     type="button"
                     onClick={onSelectHeaderAction}
                     aria-pressed={isHeaderSelected}
-                    className="w-full transition focus-visible:outline focus-visible:outline-offset-2"
+                    className="w-full transition"
                     style={{
                       textAlign: headerAlign,
                       color: headerColor,
                       borderRadius: Math.max(12, cardRadiusScaled * 0.8),
-                      outlineColor: accent,
                       backgroundColor: isHeaderSelected ? cardSurface : "transparent",
                       boxShadow: isHeaderSelected
                         ? `0 0 0 ${scaleUnit(2)}px ${accentGlow} inset`
-                        : `0 0 0 ${scaleUnit(1)}px ${borderColor} inset`,
+                        : canEdit
+                          ? `0 0 0 ${scaleUnit(1)}px ${borderColor} inset`
+                          : "none",
                     }}
                   >
                     <span
@@ -2053,14 +2061,15 @@ export default function StorySchedulePreview({
                               borderWidth: dashedBorderWidth,
                               borderStyle: "dashed",
                               backgroundColor: cardSurfaceStrong,
-                              outlineColor: accent,
+                              outlineColor: isDragOver ? accentGlow : accent,
                               boxShadow:
                                 isSelected && useInsetGlow
                                   ? `0 0 0 ${selectedCardGlowWidth}px ${accentGlow} inset`
                                   : "none",
-                              outline: isDragOver
-                                ? `${scaleUnit(1.5)}px solid ${accentGlow}`
-                                : "none",
+                              outlineWidth: isDragOver
+                                ? scaleUnit(1.5)
+                                : undefined,
+                              outlineStyle: isDragOver ? "solid" : undefined,
                               outlineOffset: isDragOver ? scaleUnit(2) : 0,
                               opacity: isDragging ? 0.6 : 1,
                             }}
@@ -2206,14 +2215,15 @@ export default function StorySchedulePreview({
                               borderWidth: cardBorderWidthRender,
                               borderStyle: "solid",
                               backgroundColor: cardSurface,
-                              outlineColor: accent,
+                              outlineColor: isDragOver ? accentGlow : accent,
                               boxShadow:
                                 isSelected && useInsetGlow
                                   ? `0 0 0 ${selectedCardGlowWidth}px ${accentGlow} inset`
                                   : "none",
-                              outline: isDragOver
-                                ? `${scaleUnit(1.5)}px solid ${accentGlow}`
-                                : "none",
+                              outlineWidth: isDragOver
+                                ? scaleUnit(1.5)
+                                : undefined,
+                              outlineStyle: isDragOver ? "solid" : undefined,
                               outlineOffset: isDragOver ? scaleUnit(2) : 0,
                               opacity: isDragging ? 0.6 : 1,
                             }}
@@ -2366,7 +2376,9 @@ export default function StorySchedulePreview({
                                         >
                                           {slot.label}
                                         </span>
-                                        <span>{slot.time}</span>
+                                        <span className="whitespace-nowrap">
+                                          {slot.time}
+                                        </span>
                                       </div>
                                     );
                                   })
@@ -2460,14 +2472,15 @@ export default function StorySchedulePreview({
                             borderWidth: cardBorderWidthRender,
                             borderStyle: "solid",
                             backgroundColor: cardSurface,
-                            outlineColor: accent,
+                            outlineColor: isDragOver ? accentGlow : accent,
                             boxShadow:
                               isSelected && useInsetGlow
                                 ? `0 0 0 ${selectedCardGlowWidth}px ${accentGlow} inset`
                                 : "none",
-                            outline: isDragOver
-                              ? `${scaleUnit(1.5)}px solid ${accentGlow}`
-                              : "none",
+                            outlineWidth: isDragOver
+                              ? scaleUnit(1.5)
+                              : undefined,
+                            outlineStyle: isDragOver ? "solid" : undefined,
                             outlineOffset: isDragOver ? scaleUnit(2) : 0,
                             opacity: isDragging ? 0.6 : 1,
                           }}
@@ -2628,9 +2641,13 @@ export default function StorySchedulePreview({
                                         cardBorderWidthRender,
                                       ),
                                       borderStyle: "solid",
-                                      outline: isStreamDragOver
-                                        ? `${scaleUnit(1.5)}px solid ${accentGlow}`
-                                        : "none",
+                                      outlineColor: accentGlow,
+                                      outlineWidth: isStreamDragOver
+                                        ? scaleUnit(1.5)
+                                        : undefined,
+                                      outlineStyle: isStreamDragOver
+                                        ? "solid"
+                                        : undefined,
                                       outlineOffset: isStreamDragOver
                                         ? scaleUnit(2)
                                         : 0,
@@ -2732,7 +2749,9 @@ export default function StorySchedulePreview({
                                             >
                                               {slot.label}
                                             </span>
-                                            <span>{slot.time}</span>
+                                            <span className="whitespace-nowrap">
+                                              {slot.time}
+                                            </span>
                                           </div>
                                         );
                                       })

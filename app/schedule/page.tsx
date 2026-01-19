@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Link from "next/link";
 import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
-import { toPng } from "html-to-image";
+import { getFontEmbedCSS, toPng } from "html-to-image";
 import StorySchedulePreview, {
   StoryDay,
   type PreviewTheme,
@@ -25,6 +25,101 @@ const exportSizes = [
   { id: "x-vertical", label: "X vertical", width: 1080, height: 1920 },
   { id: "x-horizontal", label: "X horizontal", width: 1600, height: 900 },
 ];
+
+const fontMimeTypes: Record<string, string> = {
+  woff2: "font/woff2",
+  woff: "font/woff",
+  ttf: "font/ttf",
+  otf: "font/otf",
+  eot: "application/vnd.ms-fontobject",
+};
+
+const blobToDataUrl = (blob: Blob) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error);
+    reader.onloadend = () => resolve(String(reader.result));
+    reader.readAsDataURL(blob);
+  });
+
+const inlineFontUrls = async (
+  cssText: string,
+  baseUrl: string | null,
+  cache: Map<string, string>,
+) => {
+  const urlRegex = /url\((['"]?)([^'")]+)\1\)/g;
+  const matches = Array.from(cssText.matchAll(urlRegex));
+  let result = cssText;
+
+  for (const match of matches) {
+    const original = match[0];
+    const url = match[2];
+    if (!url || url.startsWith("data:")) continue;
+    const absoluteUrl = (() => {
+      try {
+        return new URL(url, baseUrl ?? window.location.href).href;
+      } catch {
+        return url;
+      }
+    })();
+    let dataUrl = cache.get(absoluteUrl);
+    if (!dataUrl) {
+      try {
+        const response = await fetch(absoluteUrl);
+        if (!response.ok) continue;
+        const blob = await response.blob();
+        const ext = absoluteUrl.split(".").pop()?.toLowerCase() ?? "";
+        const mime = blob.type || fontMimeTypes[ext] || "application/octet-stream";
+        const typedBlob =
+          blob.type === mime ? blob : blob.slice(0, blob.size, mime);
+        dataUrl = await blobToDataUrl(typedBlob);
+        cache.set(absoluteUrl, dataUrl);
+      } catch {
+        continue;
+      }
+    }
+    result = result.replace(original, `url("${dataUrl}")`);
+  }
+
+  return result;
+};
+
+const buildFontEmbedCSS = async (root: HTMLElement) => {
+  try {
+    const css = await getFontEmbedCSS(root, {
+      cacheBust: true,
+      includeQueryParams: true,
+    });
+    if (css.trim()) return css;
+  } catch (error) {
+    console.warn("Failed to gather embedded fonts", error);
+  }
+
+  const fontFaceRules: Array<{ cssText: string; baseUrl: string | null }> = [];
+  for (const sheet of Array.from(document.styleSheets)) {
+    let rules: CSSRuleList | undefined;
+    try {
+      rules = sheet.cssRules;
+    } catch {
+      continue;
+    }
+    if (!rules) continue;
+    for (const rule of Array.from(rules)) {
+      if (rule.type === CSSRule.FONT_FACE_RULE) {
+        fontFaceRules.push({ cssText: rule.cssText, baseUrl: sheet.href });
+      }
+    }
+  }
+
+  if (fontFaceRules.length === 0) return "";
+  const cache = new Map<string, string>();
+  const inlined = await Promise.all(
+    fontFaceRules.map((rule) =>
+      inlineFontUrls(rule.cssText, rule.baseUrl, cache),
+    ),
+  );
+  return Array.from(new Set(inlined)).join("\n");
+};
 
 type FlagKey =
   | "uk"
@@ -1907,12 +2002,15 @@ export default function SchedulePage() {
         await new Promise((resolve) =>
           requestAnimationFrame(() => requestAnimationFrame(resolve)),
         );
+        if (document.fonts?.ready) {
+          await document.fonts.ready;
+        }
+        const fontEmbedCSS = await buildFontEmbedCSS(exportNode);
         const dataUrl = await toPng(exportNode, {
           pixelRatio: 1,
           cacheBust: true,
           includeQueryParams: true,
-          skipFonts: true,
-          fontEmbedCSS: "",
+          fontEmbedCSS,
           width: exportWidth,
           height: exportHeight,
           style: {
