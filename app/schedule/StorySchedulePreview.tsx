@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type DragEvent, type RefObject } from "react";
 
 const DESIGN_WIDTH = 1080;
 const DESIGN_HEIGHT = 1920;
@@ -41,15 +41,28 @@ const LANDSCAPE_PILL_MIN_HEIGHT = 46;
 const LANDSCAPE_FLAG_WIDTH = 22;
 const LANDSCAPE_FLAG_HEIGHT = 16;
 
-const canvasBackground =
+const defaultCanvasBackground =
   "radial-gradient(820px 560px at 22% 14%, rgba(124,58,237,0.28), transparent 64%)," +
   "radial-gradient(820px 600px at 84% 22%, rgba(34,211,238,0.16), transparent 66%)," +
-  "linear-gradient(180deg, rgba(9,7,24,0.96), rgba(11,7,34,0.96))";
+  "linear-gradient(180deg, rgb(9,7,24), rgb(11,7,34))";
 
-const thumbOverlay =
+const defaultThumbOverlay =
   "linear-gradient(135deg, rgba(124,58,237,0.16), rgba(34,211,238,0.1))";
 
-type FlagKey = "uk" | "us" | "eu" | "jp" | "au" | "globe";
+type FlagKey =
+  | "uk"
+  | "us"
+  | "eu"
+  | "jp"
+  | "au"
+  | "fr"
+  | "de"
+  | "es"
+  | "it"
+  | "br"
+  | "in"
+  | "kr"
+  | "globe";
 
 type TimeSlot = {
   id: string;
@@ -64,26 +77,80 @@ type TimeSlot = {
   customFlag: FlagKey;
 };
 
+type Stream = {
+  id: string;
+  title: string;
+  thumbUrl: string;
+  baseTime: string;
+  times: TimeSlot[];
+};
+
 export type StoryDay = {
   id: string;
   day: string;
   date: string;
-  title: string;
-  thumbUrl: string;
   off: boolean;
-  baseTime: string;
-  times: TimeSlot[];
+  streams: Stream[];
+};
+
+export type PreviewTheme = {
+  background: string;
+  thumbOverlay: string;
+  accent: string;
+  accentSoft: string;
+  accentGlow: string;
+  borderColor: string;
+  cardSurface: string;
+  cardSurfaceStrong: string;
+  frameRadius: number;
+  cardRadius: number;
+  frameBorderWidth: number;
+  cardBorderWidth: number;
+  bodyFont: string;
+  headingFont: string;
+  liveColor: string;
+  liveGlow: string;
+};
+
+const defaultPreviewTheme: PreviewTheme = {
+  background: defaultCanvasBackground,
+  thumbOverlay: defaultThumbOverlay,
+  accent: "#38bdf8",
+  accentSoft: "rgba(56,189,248,0.2)",
+  accentGlow: "rgba(56,189,248,0.85)",
+  borderColor: "rgba(255,255,255,0.2)",
+  cardSurface: "rgba(255,255,255,0.08)",
+  cardSurfaceStrong: "rgba(255,255,255,0.16)",
+  frameRadius: 38,
+  cardRadius: 28,
+  frameBorderWidth: 1,
+  cardBorderWidth: 1,
+  bodyFont: 'var(--font-space-grotesk), "Segoe UI", sans-serif',
+  headingFont: 'var(--font-fraunces), var(--font-space-grotesk), serif',
+  liveColor: "#ef4444",
+  liveGlow: "rgba(239,68,68,0.24)",
 };
 
 type StorySchedulePreviewProps = {
   days: StoryDay[];
   selectedDayId: string | null;
   selectedTarget: "day" | "header" | "footer" | null;
-  onSelectDay: (id: string) => void;
-  onSelectHeader: () => void;
-  onSelectFooter: () => void;
-  onAddDay: (position: "top" | "bottom") => void;
-  onDeleteDay: (id: string) => void;
+  onSelectDayAction: (id: string) => void;
+  onSelectHeaderAction: () => void;
+  onSelectFooterAction: () => void;
+  onAddDayAction: (position: "top" | "bottom") => void;
+  onDeleteDayAction: (id: string) => void;
+  onReorderDayAction: (
+    dragId: string,
+    targetId: string,
+    position: "before" | "after",
+  ) => void;
+  onReorderStreamAction: (
+    dayId: string,
+    dragId: string,
+    targetId: string,
+    position: "before" | "after",
+  ) => void;
   canAddDay: boolean;
   showAddControls: boolean;
   isExporting: boolean;
@@ -97,6 +164,8 @@ type StorySchedulePreviewProps = {
   footerLink: string;
   footerStyle: "solid" | "glass";
   footerSize: "regular" | "compact";
+  theme?: PreviewTheme;
+  layoutMode?: "portrait" | "landscape";
   exportRef?: RefObject<HTMLDivElement>;
 };
 
@@ -184,6 +253,83 @@ function FlagAU() {
   );
 }
 
+function FlagFR() {
+  return (
+    <svg viewBox="0 0 60 42" xmlns="http://www.w3.org/2000/svg">
+      <rect width="20" height="42" fill="#0055A4" />
+      <rect x="20" width="20" height="42" fill="#FFF" />
+      <rect x="40" width="20" height="42" fill="#EF4135" />
+    </svg>
+  );
+}
+
+function FlagDE() {
+  return (
+    <svg viewBox="0 0 60 42" xmlns="http://www.w3.org/2000/svg">
+      <rect width="60" height="14" fill="#000" />
+      <rect y="14" width="60" height="14" fill="#DD0000" />
+      <rect y="28" width="60" height="14" fill="#FFCE00" />
+    </svg>
+  );
+}
+
+function FlagES() {
+  return (
+    <svg viewBox="0 0 60 42" xmlns="http://www.w3.org/2000/svg">
+      <rect width="60" height="10" fill="#AA151B" />
+      <rect y="10" width="60" height="22" fill="#F1BF00" />
+      <rect y="32" width="60" height="10" fill="#AA151B" />
+    </svg>
+  );
+}
+
+function FlagIT() {
+  return (
+    <svg viewBox="0 0 60 42" xmlns="http://www.w3.org/2000/svg">
+      <rect width="20" height="42" fill="#009246" />
+      <rect x="20" width="20" height="42" fill="#FFF" />
+      <rect x="40" width="20" height="42" fill="#CE2B37" />
+    </svg>
+  );
+}
+
+function FlagBR() {
+  return (
+    <svg viewBox="0 0 60 42" xmlns="http://www.w3.org/2000/svg">
+      <rect width="60" height="42" fill="#009C3B" />
+      <polygon points="30,6 54,21 30,36 6,21" fill="#FFDF00" />
+      <circle cx="30" cy="21" r="8" fill="#002776" />
+    </svg>
+  );
+}
+
+function FlagIN() {
+  return (
+    <svg viewBox="0 0 60 42" xmlns="http://www.w3.org/2000/svg">
+      <rect width="60" height="14" fill="#FF9933" />
+      <rect y="14" width="60" height="14" fill="#FFF" />
+      <rect y="28" width="60" height="14" fill="#138808" />
+      <circle cx="30" cy="21" r="4" fill="#000080" />
+    </svg>
+  );
+}
+
+function FlagKR() {
+  return (
+    <svg viewBox="0 0 60 42" xmlns="http://www.w3.org/2000/svg">
+      <rect width="60" height="42" fill="#FFF" />
+      <path
+        d="M30 11 A10 10 0 0 1 40 21 A10 10 0 0 1 20 21 A10 10 0 0 1 30 11 Z"
+        fill="#CD2E3A"
+      />
+      <path
+        d="M30 31 A10 10 0 0 1 20 21 A10 10 0 0 1 40 21 A10 10 0 0 1 30 31 Z"
+        fill="#0047A0"
+      />
+    </svg>
+  );
+}
+
 function FlagGlobe() {
   return (
     <svg viewBox="0 0 60 42" xmlns="http://www.w3.org/2000/svg">
@@ -202,6 +348,13 @@ function FlagIcon({ flag }: { flag: FlagKey }) {
   if (flag === "eu") return <FlagEU />;
   if (flag === "jp") return <FlagJP />;
   if (flag === "au") return <FlagAU />;
+  if (flag === "fr") return <FlagFR />;
+  if (flag === "de") return <FlagDE />;
+  if (flag === "es") return <FlagES />;
+  if (flag === "it") return <FlagIT />;
+  if (flag === "br") return <FlagBR />;
+  if (flag === "in") return <FlagIN />;
+  if (flag === "kr") return <FlagKR />;
   return <FlagGlobe />;
 }
 
@@ -209,11 +362,13 @@ export default function StorySchedulePreview({
   days,
   selectedDayId,
   selectedTarget,
-  onSelectDay,
-  onSelectHeader,
-  onSelectFooter,
-  onAddDay,
-  onDeleteDay,
+  onSelectDayAction,
+  onSelectHeaderAction,
+  onSelectFooterAction,
+  onAddDayAction,
+  onDeleteDayAction,
+  onReorderDayAction,
+  onReorderStreamAction,
   canAddDay,
   showAddControls,
   isExporting,
@@ -227,10 +382,223 @@ export default function StorySchedulePreview({
   footerLink,
   footerStyle,
   footerSize,
+  theme,
+  layoutMode,
   exportRef,
 }: StorySchedulePreviewProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.32);
+  const [draggingDayId, setDraggingDayId] = useState<string | null>(null);
+  const [dragOverDayId, setDragOverDayId] = useState<string | null>(null);
+  const [dragOverPosition, setDragOverPosition] = useState<
+    "before" | "after" | null
+  >(null);
+  const [draggingStreamId, setDraggingStreamId] = useState<string | null>(null);
+  const [draggingStreamDayId, setDraggingStreamDayId] = useState<string | null>(
+    null,
+  );
+  const [dragOverStreamId, setDragOverStreamId] = useState<string | null>(null);
+  const [dragOverStreamPosition, setDragOverStreamPosition] = useState<
+    "before" | "after" | null
+  >(null);
+  const resolvedLayoutMode =
+    layoutMode ?? (canvasWidth > canvasHeight ? "landscape" : "portrait");
+  const isLandscape = resolvedLayoutMode === "landscape";
+  const canEdit = showAddControls && !isExporting;
+  const previewTheme = theme ?? defaultPreviewTheme;
+  const {
+    background,
+    thumbOverlay,
+    accent,
+    accentSoft,
+    accentGlow,
+    borderColor,
+    cardSurface,
+    cardSurfaceStrong,
+    frameRadius,
+    cardRadius,
+    frameBorderWidth,
+    cardBorderWidth,
+    bodyFont,
+    headingFont,
+    liveColor,
+    liveGlow,
+  } = previewTheme;
+  const dropIndicatorHorizontal = `linear-gradient(90deg, ${accentSoft}, ${accent}, ${accentSoft})`;
+  const dropIndicatorVertical = `linear-gradient(180deg, ${accentSoft}, ${accent}, ${accentSoft})`;
+  const dropIndicatorShadow = `0 0 0 1px ${accent}, 0 0 18px ${accentGlow}`;
+
+  const handleDragStart = (event: DragEvent, dayId: string) => {
+    if (!canEdit) return;
+    if (draggingStreamId) return;
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", dayId);
+    setDraggingDayId(dayId);
+    setDragOverDayId(null);
+    setDragOverPosition(null);
+    onSelectDayAction(dayId);
+  };
+
+  const handleDragOver = (event: DragEvent, dayId: string, axis: "x" | "y") => {
+    if (!canEdit) return;
+    if (draggingStreamId) return;
+    event.preventDefault();
+    if (dayId === draggingDayId) {
+      setDragOverDayId(null);
+      setDragOverPosition(null);
+      return;
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    const midpoint =
+      axis === "x"
+        ? rect.left + rect.width / 2
+        : rect.top + rect.height / 2;
+    const cursor = axis === "x" ? event.clientX : event.clientY;
+    const position = cursor < midpoint ? "before" : "after";
+    setDragOverDayId(dayId);
+    setDragOverPosition(position);
+  };
+
+  const handleDragLeave = (event: DragEvent) => {
+    if (!canEdit) return;
+    const related = event.relatedTarget as Node | null;
+    if (related && event.currentTarget.contains(related)) return;
+    setDragOverDayId(null);
+    setDragOverPosition(null);
+  };
+
+  const handleDrop = (
+    event: DragEvent,
+    dayId: string,
+    axis: "x" | "y",
+  ) => {
+    if (!canEdit) return;
+    if (draggingStreamId) return;
+    event.preventDefault();
+    const dragId = draggingDayId ?? event.dataTransfer.getData("text/plain");
+    if (!dragId || dragId === dayId) {
+      setDragOverDayId(null);
+      setDragOverPosition(null);
+      setDraggingDayId(null);
+      return;
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    const midpoint =
+      axis === "x"
+        ? rect.left + rect.width / 2
+        : rect.top + rect.height / 2;
+    const cursor = axis === "x" ? event.clientX : event.clientY;
+    const position = cursor < midpoint ? "before" : "after";
+    onReorderDayAction(dragId, dayId, position);
+    setDragOverDayId(null);
+    setDragOverPosition(null);
+    setDraggingDayId(null);
+  };
+
+  const handleDragEnd = () => {
+    setDragOverDayId(null);
+    setDragOverPosition(null);
+    setDraggingDayId(null);
+  };
+
+  const handleStreamDragStart = (
+    event: DragEvent,
+    dayId: string,
+    streamId: string,
+  ) => {
+    if (!canEdit) return;
+    event.stopPropagation();
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", streamId);
+    setDraggingDayId(null);
+    setDragOverDayId(null);
+    setDragOverPosition(null);
+    setDraggingStreamId(streamId);
+    setDraggingStreamDayId(dayId);
+    setDragOverStreamId(null);
+    setDragOverStreamPosition(null);
+    onSelectDayAction(dayId);
+  };
+
+  const handleStreamDragOver = (
+    event: DragEvent,
+    dayId: string,
+    streamId: string,
+    axis: "x" | "y",
+  ) => {
+    if (!canEdit) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (!draggingStreamId || draggingStreamDayId !== dayId) {
+      setDragOverStreamId(null);
+      setDragOverStreamPosition(null);
+      return;
+    }
+    if (streamId === draggingStreamId) {
+      setDragOverStreamId(null);
+      setDragOverStreamPosition(null);
+      return;
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    const midpoint =
+      axis === "x"
+        ? rect.left + rect.width / 2
+        : rect.top + rect.height / 2;
+    const cursor = axis === "x" ? event.clientX : event.clientY;
+    const position = cursor < midpoint ? "before" : "after";
+    setDragOverStreamId(streamId);
+    setDragOverStreamPosition(position);
+  };
+
+  const handleStreamDragLeave = (event: DragEvent) => {
+    if (!canEdit) return;
+    event.stopPropagation();
+    const related = event.relatedTarget as Node | null;
+    if (related && event.currentTarget.contains(related)) return;
+    setDragOverStreamId(null);
+    setDragOverStreamPosition(null);
+  };
+
+  const handleStreamDrop = (
+    event: DragEvent,
+    dayId: string,
+    streamId: string,
+    axis: "x" | "y",
+  ) => {
+    if (!canEdit) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const dragId =
+      draggingStreamDayId === dayId
+        ? draggingStreamId
+        : event.dataTransfer.getData("text/plain");
+    if (!dragId || dragId === streamId || draggingStreamDayId !== dayId) {
+      setDragOverStreamId(null);
+      setDragOverStreamPosition(null);
+      setDraggingStreamId(null);
+      setDraggingStreamDayId(null);
+      return;
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    const midpoint =
+      axis === "x"
+        ? rect.left + rect.width / 2
+        : rect.top + rect.height / 2;
+    const cursor = axis === "x" ? event.clientX : event.clientY;
+    const position = cursor < midpoint ? "before" : "after";
+    onReorderStreamAction(dayId, dragId, streamId, position);
+    setDragOverStreamId(null);
+    setDragOverStreamPosition(null);
+    setDraggingStreamId(null);
+    setDraggingStreamDayId(null);
+  };
+
+  const handleStreamDragEnd = () => {
+    setDragOverStreamId(null);
+    setDragOverStreamPosition(null);
+    setDraggingStreamId(null);
+    setDraggingStreamDayId(null);
+  };
 
   useEffect(() => {
     const wrapper = wrapperRef.current;
@@ -254,10 +622,7 @@ export default function StorySchedulePreview({
     return () => observer.disconnect();
   }, [canvasWidth, canvasHeight]);
 
-  const isLandscape = canvasWidth > canvasHeight;
-  const canEdit = showAddControls && !isExporting;
-
-  const addDayButtonClass = `flex w-full items-center justify-center gap-3 rounded-[24px] border-2 border-dashed font-semibold uppercase tracking-[0.24em] transition ${
+  const addDayButtonClass = `flex w-full items-center justify-center gap-3 rounded-3xl border border-dashed font-semibold uppercase tracking-[0.24em] transition ${
     canAddDay
       ? "border-white/30 bg-white/5 text-white/80 hover:border-white/60 hover:text-white"
       : "cursor-not-allowed border-white/15 bg-white/5 text-white/40"
@@ -331,6 +696,7 @@ export default function StorySchedulePreview({
     footerStyle === "solid"
       ? "border-white/25 bg-white/15"
       : "border-white/15 bg-white/5";
+  const footerSurface = footerStyle === "solid" ? cardSurfaceStrong : cardSurface;
   const footerScale = layoutScale;
   const footerMetrics =
     footerSize === "compact"
@@ -371,6 +737,21 @@ export default function StorySchedulePreview({
   const fitScale = baseListHeight > 0 ? availableHeight / baseListHeight : 1;
   const listScale = Math.min(1.3, countScale, fitScale);
   const scaledListHeight = baseListHeight * listScale;
+  const frameRadiusScaled = Math.max(12, frameRadius * layoutScale);
+  const frameBorderWidthScaled = Math.max(1, frameBorderWidth * layoutScale);
+  const cardRadiusScaled = Math.max(10, cardRadius * layoutScale * listScale);
+  const cardBorderWidthScaled = Math.max(
+    1,
+    cardBorderWidth * layoutScale * listScale,
+  );
+  const previewScaleComp = isExporting
+    ? 1
+    : Math.min(1.35, 1 / Math.max(scale, 0.7));
+  const shouldCompensateBorder = !isExporting && cardBorderWidthScaled <= 1.1;
+  const cardBorderWidthRender = shouldCompensateBorder
+    ? cardBorderWidthScaled * previewScaleComp
+    : cardBorderWidthScaled;
+  const dashedBorderWidth = Math.max(2, cardBorderWidthScaled);
   const scaleX = (value: number) =>
     Number((value * widthScale * listScale).toFixed(2));
   const scaleY = (value: number) =>
@@ -386,6 +767,9 @@ export default function StorySchedulePreview({
   const scaledOffDayCardHeight = offDayCardHeight * listScale;
   const scaledDayThumbWidth = dayCardThumbWidth * listScale;
   const scaledOffDayThumbWidth = offDayThumbWidth * listScale;
+  const portraitStreamBorderWidth = Math.max(1, cardBorderWidthRender);
+  const useInsetGlow = cardBorderWidthScaled > 1.1;
+  const selectedCardGlowWidth = Math.max(cardBorderWidthScaled, scaleUnit(1));
 
   const landscapeWidthScale = canvasWidth / LANDSCAPE_WIDTH;
   const landscapeHeightScale = canvasHeight / LANDSCAPE_HEIGHT;
@@ -458,7 +842,24 @@ export default function StorySchedulePreview({
   const tileFont = (value: number) => Math.round(value * tileScale);
   const tilePadding = LANDSCAPE_TILE_PADDING * tileScale;
   const tileOffPadding = tilePadding * 0.7;
-  const tileRadius = LANDSCAPE_TILE_RADIUS * tileScale;
+  const tileRadius = Math.max(12, cardRadius * tileScale);
+  const landscapeFrameRadius = Math.max(12, frameRadius * landscapeScale);
+  const landscapeFrameBorderWidth = Math.max(
+    1,
+    frameBorderWidth * landscapeScale,
+  );
+  const landscapeCardBorderWidth = Math.max(1, cardBorderWidth * tileScale);
+  const shouldCompensateBorderLandscape =
+    !isExporting && landscapeCardBorderWidth <= 1.1;
+  const landscapeCardBorderWidthRender = shouldCompensateBorderLandscape
+    ? landscapeCardBorderWidth * previewScaleComp
+    : landscapeCardBorderWidth;
+  const dashedBorderWidthLandscape = Math.max(2, landscapeCardBorderWidth);
+  const useInsetGlowLandscape = landscapeCardBorderWidth > 1.1;
+  const selectedCardGlowWidthLandscape = Math.max(
+    landscapeCardBorderWidth,
+    tileUnit(1),
+  );
   const gridGap = 10 * tileScale;
   const addButtonHeightLandscape = 46 * landscapeScale;
   const addColumnWeight = Math.max(0.04, Math.min(0.08, 0.07 - dayCount * 0.004));
@@ -471,7 +872,7 @@ export default function StorySchedulePreview({
   ) => (
     <button
       type="button"
-      onClick={() => onAddDay(position)}
+      onClick={() => onAddDayAction(position)}
       disabled={!canAddDay}
       className={addDayButtonClass}
       style={{
@@ -479,6 +880,8 @@ export default function StorySchedulePreview({
         padding: `${scaleY(24)}px ${scaleX(16)}px`,
         fontSize: scaleFont(13),
         gap: scaleUnit(12),
+        borderWidth: dashedBorderWidth,
+        borderColor: canAddDay ? borderColor : "rgba(255,255,255,0.18)",
       }}
     >
       <span className="font-black" style={{ fontSize: scaleFont(22) }}>
@@ -494,7 +897,7 @@ export default function StorySchedulePreview({
   ) => (
     <button
       type="button"
-      onClick={() => onAddDay(position)}
+      onClick={() => onAddDayAction(position)}
       disabled={!canAddDay}
       className={addDayButtonClass}
       style={{
@@ -502,6 +905,8 @@ export default function StorySchedulePreview({
         padding: `${landscapeY(12)}px ${landscapeX(12)}px`,
         fontSize: landscapeFont(11),
         gap: landscapeUnit(8),
+        borderWidth: dashedBorderWidthLandscape,
+        borderColor: canAddDay ? borderColor : "rgba(255,255,255,0.18)",
       }}
     >
       <span className="font-black" style={{ fontSize: landscapeFont(16) }}>
@@ -516,7 +921,7 @@ export default function StorySchedulePreview({
       <div className="flex w-full justify-center">
         <div
           ref={wrapperRef}
-          className="relative w-full max-w-[980px]"
+          className="relative w-full max-w-245"
           style={{ aspectRatio: `${canvasWidth} / ${canvasHeight}` }}
         >
           <div
@@ -530,10 +935,17 @@ export default function StorySchedulePreview({
             }}
           >
             <div
-              className={`relative h-full w-full overflow-hidden rounded-[38px] border border-white/10 text-white ${
+              className={`relative h-full w-full overflow-hidden border text-white ${
                 isExporting ? "shadow-none" : "shadow-[0_28px_85px_rgba(0,0,0,0.58)]"
               }`}
-              style={{ backgroundImage: canvasBackground }}
+              style={{
+                backgroundImage: background,
+                borderColor,
+                borderWidth: landscapeFrameBorderWidth,
+                borderStyle: "solid",
+                borderRadius: landscapeFrameRadius,
+                fontFamily: bodyFont,
+              }}
             >
               <div
                 className="absolute inset-0 flex flex-col"
@@ -546,21 +958,25 @@ export default function StorySchedulePreview({
                   <div className="flex items-end" style={{ height: landscapeHeaderHeight }}>
                     <button
                       type="button"
-                      onClick={onSelectHeader}
+                      onClick={onSelectHeaderAction}
                       aria-pressed={isHeaderSelected}
-                      className={`w-full rounded-[20px] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${
-                        isHeaderSelected
-                          ? "ring-2 ring-cyan-300/80 bg-white/5"
-                          : "ring-1 ring-transparent"
-                      }`}
+                      className="w-full transition"
                       style={{
                         textAlign: headerAlign,
                         color: headerColor,
+                        borderRadius: Math.max(12, tileRadius * 0.7),
+                        backgroundColor: isHeaderSelected ? cardSurface : "transparent",
+                        boxShadow: isHeaderSelected
+                          ? `0 0 0 ${landscapeUnit(1.5)}px ${accentGlow} inset`
+                          : canEdit
+                            ? `0 0 0 ${landscapeUnit(1)}px ${borderColor} inset`
+                            : "none",
                       }}
                     >
                       <span
-                        className="font-black leading-[1.05] tracking-[-0.02em] break-words"
+                        className="font-black leading-[1.05] tracking-[-0.02em] wrap-break-word"
                         style={{
+                          fontFamily: headingFont,
                           fontSize: landscapeHeaderFontSize,
                           lineHeight: landscapeHeaderLineHeight,
                           paddingBottom: landscapeHeaderPadding,
@@ -583,7 +999,7 @@ export default function StorySchedulePreview({
                   {days.length === 0 ? (
                     <div className="flex flex-col" style={{ gap: landscapeGap }}>
                       <div
-                        className="rounded-[20px] border border-dashed border-white/20 bg-white/5 text-center text-sm text-white/70"
+                        className="rounded-[20px] border border-white/20 bg-white/5 text-center text-sm text-white/70"
                         style={{
                           padding: `${landscapeY(32)}px ${landscapeX(24)}px`,
                           fontSize: landscapeFont(13),
@@ -604,7 +1020,7 @@ export default function StorySchedulePreview({
                       {showAddControls ? (
                         <button
                           type="button"
-                          onClick={() => onAddDay("top")}
+                          onClick={() => onAddDayAction("top")}
                           disabled={!canAddDay}
                           className={addDayButtonClass}
                           style={{
@@ -632,10 +1048,349 @@ export default function StorySchedulePreview({
                         {days.map((day) => {
                           const isSelected =
                             selectedTarget === "day" && day.id === selectedDayId;
-                          const backgroundImage = day.thumbUrl
-                            ? `${thumbOverlay}, linear-gradient(180deg, rgba(8,8,14,0.5), rgba(8,8,14,0.5)), url("${day.thumbUrl}")`
-                            : `${thumbOverlay}, linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0))`;
+                          const isDragging = draggingDayId === day.id;
+                          const isDragOver =
+                            dragOverDayId === day.id && draggingDayId !== day.id;
+                          const dropIndicator =
+                            isDragOver && dragOverPosition && !draggingStreamId
+                              ? dragOverPosition
+                              : null;
                           const tileWeight = day.off ? offDayWeight : streamDayWeight;
+                          const streamCount = day.streams.length;
+                          const primaryStream = day.streams[0] ?? {
+                            id: "stream-empty",
+                            title: "",
+                            thumbUrl: "",
+                            baseTime: "20:30",
+                            times: [],
+                          };
+
+                          if (!day.off && streamCount <= 1) {
+                            const slotCount = primaryStream.times.length;
+                            const slotScale = Math.max(
+                              0.78,
+                              Math.min(
+                                1,
+                                1 - Math.max(0, slotCount - 2) * 0.12,
+                              ),
+                            );
+                            const slotUnit = (value: number) =>
+                              tileUnit(value) * slotScale;
+                            const flagWidth =
+                              LANDSCAPE_FLAG_WIDTH * tileScale * slotScale;
+                            const flagHeight =
+                              LANDSCAPE_FLAG_HEIGHT * tileScale * slotScale;
+                            const emojiFont = Math.max(
+                              10,
+                              Math.round(flagHeight * 1.25),
+                            );
+                            const backgroundImage = primaryStream.thumbUrl
+                              ? `${thumbOverlay}, linear-gradient(180deg, rgba(8,8,14,0.5), rgba(8,8,14,0.5)), url("${primaryStream.thumbUrl}")`
+                              : `${thumbOverlay}, linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0))`;
+
+                            return (
+                              <div
+                                key={day.id}
+                                className="relative flex min-h-0 flex-col"
+                                style={{
+                                  flex: `${tileWeight} 1 0`,
+                                  height: "100%",
+                                  minWidth: 0,
+                                }}
+                              >
+                                {dropIndicator ? (
+                                  <div
+                                    aria-hidden="true"
+                                    className="pointer-events-none absolute top-0 bottom-0"
+                                    style={{
+                                      left:
+                                        dropIndicator === "before"
+                                          ? tileUnit(-6)
+                                          : "auto",
+                                      right:
+                                        dropIndicator === "after"
+                                          ? tileUnit(-6)
+                                          : "auto",
+                                      width: tileUnit(4),
+                                      borderRadius: tileUnit(4),
+                                      background: dropIndicatorVertical,
+                                      boxShadow: dropIndicatorShadow,
+                                      zIndex: 15,
+                                    }}
+                                  />
+                                ) : null}
+                                <button
+                                  type="button"
+                                  onClick={() => onSelectDayAction(day.id)}
+                                  draggable={canEdit}
+                                  onDragStart={(event) =>
+                                    handleDragStart(event, day.id)
+                                  }
+                                  onDragOver={(event) =>
+                                    handleDragOver(event, day.id, "x")
+                                  }
+                                  onDragLeave={handleDragLeave}
+                                  onDrop={(event) => handleDrop(event, day.id, "x")}
+                                  onDragEnd={handleDragEnd}
+                                  aria-pressed={isSelected}
+                                  className={`relative flex min-h-0 w-full flex-1 flex-col border text-left transition focus-visible:outline focus-visible:outline-offset-2 ${
+                                    canEdit
+                                      ? "cursor-grab active:cursor-grabbing"
+                                      : ""
+                                  }`}
+                                  style={{
+                                    borderRadius: tileRadius,
+                                    borderColor: isSelected ? accent : borderColor,
+                                    borderWidth: landscapeCardBorderWidthRender,
+                                    borderStyle: "solid",
+                                    outlineColor: isDragOver ? accentGlow : accent,
+                                    padding: tilePadding,
+                                    backgroundColor: cardSurface,
+                                    backgroundImage,
+                                    backgroundSize: "cover",
+                                    backgroundPosition: "center",
+                                    backgroundBlendMode: "screen, normal, normal",
+                                    boxShadow:
+                                      isSelected && useInsetGlowLandscape
+                                        ? `0 0 0 ${selectedCardGlowWidthLandscape}px ${accentGlow} inset`
+                                        : "none",
+                                    outlineWidth: isDragOver
+                                      ? tileUnit(1.5)
+                                      : undefined,
+                                    outlineStyle: isDragOver ? "solid" : undefined,
+                                    outlineOffset: isDragOver ? tileUnit(2) : 0,
+                                    opacity: isDragging ? 0.6 : 1,
+                                  }}
+                                >
+                                  <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+                                    <div
+                                      className="font-black uppercase tracking-[0.12em] text-white/85"
+                                      style={{
+                                        fontSize: tileFont(LANDSCAPE_DAY_NAME_SIZE),
+                                        paddingTop: tileUnit(2),
+                                      }}
+                                    >
+                                      {day.day}
+                                    </div>
+                                    <div
+                                      className="flex flex-wrap items-center"
+                                      style={{
+                                        gap: tileUnit(8),
+                                        marginTop: tileUnit(8),
+                                      }}
+                                    >
+                                      <div
+                                        className="inline-flex items-center rounded-full border border-white/20 bg-black/60 font-black uppercase tracking-widest text-white/95"
+                                        style={{
+                                          gap: tileUnit(8),
+                                          padding: `${tileUnit(6)}px ${tileUnit(9)}px`,
+                                          fontSize: tileFont(LANDSCAPE_LIVE_SIZE),
+                                        }}
+                                      >
+                                    <span
+                                      className="rounded-full"
+                                      style={{
+                                        width: tileUnit(9),
+                                        height: tileUnit(9),
+                                        backgroundColor: liveColor,
+                                        boxShadow: `0 0 0 ${tileUnit(
+                                          6,
+                                        )}px ${liveGlow}`,
+                                      }}
+                                    />
+                                        <span>Live</span>
+                                      </div>
+                                      <div
+                                        className="inline-flex items-center rounded-full border border-white/20 bg-white/20 font-black uppercase tracking-[0.06em] text-white/85"
+                                        style={{
+                                          padding: `${tileUnit(6)}px ${tileUnit(9)}px`,
+                                          fontSize: tileFont(LANDSCAPE_DATE_SIZE),
+                                        }}
+                                      >
+                                        {day.date || "TBD"}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div
+                                    className="absolute left-0 right-0 flex flex-col"
+                                    style={{
+                                      left: tilePadding,
+                                      right: tilePadding,
+                                      top: "50%",
+                                      transform: "translateY(-50%)",
+                                      gap: tileUnit(12),
+                                    }}
+                                  >
+                                    <div
+                                      className="font-black leading-[1.18] tracking-[-0.01em]"
+                                      style={{
+                                        fontFamily: headingFont,
+                                        fontSize: tileFont(LANDSCAPE_TITLE_SIZE),
+                                        display: "-webkit-box",
+                                        WebkitLineClamp: 2,
+                                        WebkitBoxOrient: "vertical",
+                                        overflow: "hidden",
+                                        wordBreak: "break-word",
+                                      }}
+                                    >
+                                      {primaryStream.title || "Untitled stream"}
+                                    </div>
+                                    <div
+                                      className="flex flex-col"
+                                      style={{ gap: slotUnit(8) }}
+                                    >
+                                      {primaryStream.times.length === 0 ? (
+                                        <div
+                                          className="w-full rounded-2xl border border-white/20 bg-white/5 font-semibold uppercase tracking-[0.14em] text-white/70"
+                                          style={{
+                                            minHeight:
+                                              LANDSCAPE_PILL_MIN_HEIGHT *
+                                              tileScale *
+                                              slotScale,
+                                            padding: `${slotUnit(8)}px ${slotUnit(
+                                              10,
+                                            )}px`,
+                                            fontSize: Math.max(
+                                              9,
+                                              Math.round(
+                                                tileFont(10) * slotScale,
+                                              ),
+                                            ),
+                                          }}
+                                        >
+                                          Add time slot
+                                        </div>
+                                      ) : (
+                                        primaryStream.times.map((slot) => {
+                                          const hasCustomEmoji =
+                                            slot.zoneId === "custom" &&
+                                            Boolean(slot.customEmoji);
+
+                                          return (
+                                            <div
+                                              key={slot.id}
+                                              className="flex w-full items-center rounded-2xl border border-white/20 bg-white/20 text-white/95"
+                                              style={{
+                                                minHeight:
+                                                  LANDSCAPE_PILL_MIN_HEIGHT *
+                                                  tileScale *
+                                                  slotScale,
+                                                padding: `${slotUnit(4)}px ${slotUnit(
+                                                  10,
+                                                )}px`,
+                                                borderRadius:
+                                                  LANDSCAPE_PILL_RADIUS *
+                                                  tileScale *
+                                                  slotScale,
+                                              }}
+                                            >
+                                              <div
+                                                className="flex w-full items-center"
+                                                style={{ gap: slotUnit(8) }}
+                                              >
+                                                <span
+                                                  className={`overflow-hidden rounded-[3px] ${
+                                                    hasCustomEmoji
+                                                      ? "shadow-none"
+                                                      : "shadow-[0_0_0_1px_rgba(255,255,255,0.18)]"
+                                                  }`}
+                                                  style={{
+                                                    width: flagWidth,
+                                                    height: flagHeight,
+                                                  }}
+                                                >
+                                                  {hasCustomEmoji ? (
+                                                    <span
+                                                      className="flex h-full w-full items-center justify-center"
+                                                      style={{
+                                                        fontSize: emojiFont,
+                                                        lineHeight: 1,
+                                                      }}
+                                                    >
+                                                      {slot.customEmoji}
+                                                    </span>
+                                                  ) : (
+                                                    <FlagIcon flag={slot.flag} />
+                                                  )}
+                                                </span>
+                                                <span
+                                                  className="min-w-0 truncate font-black uppercase tracking-widest text-white/80"
+                                                  style={{
+                                                    fontSize: Math.max(
+                                                      9,
+                                                      Math.round(
+                                                        tileFont(
+                                                          LANDSCAPE_TZ_SIZE,
+                                                        ) * slotScale,
+                                                      ),
+                                                    ),
+                                                  }}
+                                                >
+                                                  {slot.label}
+                                                </span>
+                                                <span
+                                                  className="font-black whitespace-nowrap"
+                                                  style={{
+                                                    marginLeft: "auto",
+                                                    fontSize: Math.max(
+                                                      9,
+                                                      Math.round(
+                                                        tileFont(
+                                                          LANDSCAPE_TIME_SIZE,
+                                                        ) * slotScale,
+                                                      ),
+                                                    ),
+                                                  }}
+                                                >
+                                                  {slot.time}
+                                                </span>
+                                              </div>
+                                            </div>
+                                          );
+                                        })
+                                      )}
+                                    </div>
+                                  </div>
+                                </button>
+                                {canEdit && isSelected ? (
+                                  <button
+                                    type="button"
+                                    aria-label="Delete day"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      onDeleteDayAction(day.id);
+                                    }}
+                                    className="absolute flex items-center justify-center rounded-full bg-red-500 text-white shadow-[0_6px_18px_rgba(0,0,0,0.35)] transition hover:bg-red-600"
+                                    style={{
+                                      top: tileUnit(6),
+                                      right: tileUnit(6),
+                                      width: tileUnit(28),
+                                      height: tileUnit(28),
+                                      zIndex: 10,
+                                      fontSize: tileFont(14),
+                                      pointerEvents: "auto",
+                                    }}
+                                  >
+                                    x
+                                  </button>
+                                ) : null}
+                              </div>
+                            );
+                          }
+
+                          const streamScale = Math.max(
+                            0.6,
+                            1 - Math.max(0, streamCount - 1) * 0.18,
+                          );
+                          const streamPillScale = Math.max(
+                            0.65,
+                            1 - Math.max(0, streamCount - 1) * 0.14,
+                          );
+                          const streamUnit = (value: number) =>
+                            tileUnit(value) * streamScale;
+                          const streamFont = (value: number) =>
+                            Math.round(tileFont(value) * streamScale);
                           return (
                             <div
                               key={day.id}
@@ -646,201 +1401,402 @@ export default function StorySchedulePreview({
                                 minWidth: 0,
                               }}
                             >
+                              {dropIndicator ? (
+                                <div
+                                  aria-hidden="true"
+                                  className="pointer-events-none absolute top-0 bottom-0"
+                                  style={{
+                                    left:
+                                      dropIndicator === "before"
+                                        ? tileUnit(-6)
+                                        : "auto",
+                                    right:
+                                      dropIndicator === "after"
+                                        ? tileUnit(-6)
+                                        : "auto",
+                                    width: tileUnit(4),
+                                    borderRadius: tileUnit(4),
+                                      background: dropIndicatorVertical,
+                                      boxShadow: dropIndicatorShadow,
+                                    zIndex: 15,
+                                  }}
+                                />
+                              ) : null}
                               <button
                                 type="button"
-                                onClick={() => onSelectDay(day.id)}
+                                onClick={() => onSelectDayAction(day.id)}
+                                draggable={canEdit}
+                                onDragStart={(event) => handleDragStart(event, day.id)}
+                                onDragOver={(event) =>
+                                  handleDragOver(event, day.id, "x")
+                                }
+                                onDragLeave={handleDragLeave}
+                                onDrop={(event) => handleDrop(event, day.id, "x")}
+                                onDragEnd={handleDragEnd}
                                 aria-pressed={isSelected}
-                                className={`relative flex min-h-0 w-full flex-1 flex-col border text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${
-                                  isSelected
-                                    ? "border-cyan-300/80"
-                                    : "border-white/20"
-                                } ${day.off ? "border-2 border-dashed" : ""}`}
+                                className={`relative flex min-h-0 w-full flex-1 flex-col border text-left transition focus-visible:outline focus-visible:outline-offset-2 ${
+                                  canEdit ? "cursor-grab active:cursor-grabbing" : ""
+                                }`}
                                 style={{
                                   borderRadius: tileRadius,
+                                  borderColor: isSelected ? accent : borderColor,
+                                  borderWidth: day.off
+                                    ? dashedBorderWidthLandscape
+                                    : landscapeCardBorderWidthRender,
+                                  borderStyle: day.off ? "dashed" : "solid",
+                                  outlineColor: isDragOver ? accentGlow : accent,
                                   padding: day.off ? tileOffPadding : tilePadding,
                                   backgroundColor: day.off
-                                    ? "rgba(255,255,255,0.04)"
-                                    : "rgba(255,255,255,0.06)",
-                                  backgroundImage: day.off
-                                    ? "none"
-                                    : backgroundImage,
-                                  backgroundSize: "cover",
-                                  backgroundPosition: "center",
-                                  backgroundBlendMode: day.off
-                                    ? "normal"
-                                    : "screen, normal, normal",
-                                  boxShadow: isSelected
-                                    ? `0 0 0 ${tileUnit(2)}px rgba(56,189,248,0.85) inset`
-                                    : "none",
+                                    ? cardSurfaceStrong
+                                    : cardSurface,
+                                  boxShadow:
+                                    isSelected && useInsetGlowLandscape
+                                      ? `0 0 0 ${selectedCardGlowWidthLandscape}px ${accentGlow} inset`
+                                      : "none",
+                                  outlineWidth: isDragOver
+                                    ? tileUnit(1.5)
+                                    : undefined,
+                                  outlineStyle: isDragOver ? "solid" : undefined,
+                                  outlineOffset: isDragOver ? tileUnit(2) : 0,
+                                  opacity: isDragging ? 0.6 : 1,
                                 }}
                               >
-                            <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+                            <div
+                              className="relative z-10 flex min-h-0 flex-1 flex-col"
+                              style={{ gap: tileUnit(10) }}
+                            >
                               <div
-                                className="font-black uppercase tracking-[0.12em] text-white/85"
-                                style={{
-                                  fontSize: tileFont(LANDSCAPE_DAY_NAME_SIZE),
-                                  paddingTop: tileUnit(2),
-                                }}
+                                className="flex flex-col"
+                                style={{ gap: tileUnit(8) }}
                               >
-                                {day.day}
-                              </div>
-                              {!day.off ? (
                                 <div
-                                  className="flex flex-wrap items-center"
+                                  className="font-black uppercase tracking-[0.12em] text-white/85"
                                   style={{
-                                    gap: tileUnit(8),
-                                    marginTop: tileUnit(8),
+                                    fontSize: tileFont(LANDSCAPE_DAY_NAME_SIZE),
+                                    paddingTop: tileUnit(2),
                                   }}
                                 >
+                                  {day.day}
+                                </div>
+                                {!day.off ? (
                                   <div
-                                    className="inline-flex items-center rounded-full border border-white/20 bg-black/60 font-black uppercase tracking-[0.1em] text-white/95"
+                                    className="flex flex-wrap items-center"
                                     style={{
                                       gap: tileUnit(8),
-                                      padding: `${tileUnit(6)}px ${tileUnit(9)}px`,
-                                      fontSize: tileFont(LANDSCAPE_LIVE_SIZE),
                                     }}
                                   >
-                                    <span
-                                      className="rounded-full bg-red-500"
-                                      style={{
-                                        width: tileUnit(9),
-                                        height: tileUnit(9),
-                                        boxShadow: `0 0 0 ${tileUnit(6)}px rgba(255,45,45,0.16)`,
-                                      }}
-                                    />
-                                    <span>Live</span>
-                                  </div>
-                                  <div
-                                    className="inline-flex items-center rounded-full border border-white/20 bg-white/20 font-black uppercase tracking-[0.06em] text-white/85"
-                                    style={{
-                                      padding: `${tileUnit(6)}px ${tileUnit(9)}px`,
-                                      fontSize: tileFont(LANDSCAPE_DATE_SIZE),
-                                    }}
-                                  >
-                                    {day.date || "TBD"}
-                                  </div>
-                                </div>
-                              ) : (
-                                <div
-                                  className="font-semibold text-white/65"
-                                  style={{
-                                    marginTop: tileUnit(12),
-                                    fontSize: tileFont(13),
-                                  }}
-                                >
-                                  No stream scheduled
-                                </div>
-                              )}
-                            </div>
-
-                            {!day.off ? (
-                              <div
-                                className="absolute left-0 right-0 flex flex-col"
-                                style={{
-                                  left: tilePadding,
-                                  right: tilePadding,
-                                  top: "50%",
-                                  transform: "translateY(-50%)",
-                                  gap: tileUnit(12),
-                                }}
-                              >
-                                <div
-                                  className="font-black leading-[1.18] tracking-[-0.01em]"
-                                  style={{
-                                    fontSize: tileFont(LANDSCAPE_TITLE_SIZE),
-                                    display: "-webkit-box",
-                                    WebkitLineClamp: 2,
-                                    WebkitBoxOrient: "vertical",
-                                    overflow: "hidden",
-                                    wordBreak: "break-word",
-                                  }}
-                                >
-                                  {day.title || "Untitled stream"}
-                                </div>
-                                <div
-                                  className="flex flex-col"
-                                  style={{ gap: tileUnit(8) }}
-                                >
-                                  {day.times.length === 0 ? (
                                     <div
-                                      className="w-full rounded-[16px] border border-dashed border-white/20 bg-white/5 font-semibold uppercase tracking-[0.14em] text-white/70"
+                                      className="inline-flex items-center rounded-full border border-white/20 bg-black/60 font-black uppercase tracking-widest text-white/95"
+                                      style={{
+                                        gap: tileUnit(8),
+                                        padding: `${tileUnit(6)}px ${tileUnit(9)}px`,
+                                        fontSize: tileFont(LANDSCAPE_LIVE_SIZE),
+                                      }}
+                                    >
+                                      <span
+                                        className="rounded-full"
+                                        style={{
+                                          width: tileUnit(9),
+                                          height: tileUnit(9),
+                                          backgroundColor: liveColor,
+                                          boxShadow: `0 0 0 ${tileUnit(
+                                            6,
+                                          )}px ${liveGlow}`,
+                                        }}
+                                      />
+                                      <span>Live</span>
+                                    </div>
+                                    <div
+                                      className="inline-flex items-center rounded-full border border-white/20 bg-white/20 font-black uppercase tracking-[0.06em] text-white/85"
+                                      style={{
+                                        padding: `${tileUnit(6)}px ${tileUnit(9)}px`,
+                                        fontSize: tileFont(LANDSCAPE_DATE_SIZE),
+                                      }}
+                                    >
+                                      {day.date || "TBD"}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div
+                                    className="font-semibold text-white/65"
+                                    style={{ fontSize: tileFont(13) }}
+                                  >
+                                  No streams scheduled
+                                  </div>
+                                )}
+                              </div>
+
+                              {!day.off ? (
+                                <div
+                                  className="flex min-h-0 flex-1 flex-col"
+                                  style={{ gap: streamUnit(8) }}
+                                >
+                                  {day.streams.length === 0 ? (
+                                    <div
+                                      className="w-full rounded-2xl border border-dashed bg-white/5 font-semibold uppercase tracking-[0.14em] text-white/70"
                                       style={{
                                         minHeight:
                                           LANDSCAPE_PILL_MIN_HEIGHT * tileScale,
-                                        padding: `${tileUnit(8)}px ${tileUnit(10)}px`,
-                                        fontSize: tileFont(10),
+                                        padding: `${streamUnit(8)}px ${streamUnit(10)}px`,
+                                        fontSize: streamFont(10),
+                                        borderColor,
+                                        borderWidth: dashedBorderWidthLandscape,
                                       }}
                                     >
-                                      Add time slot
+                                      Add stream
                                     </div>
                                   ) : (
-                                    day.times.map((slot) => (
-                                      <div
-                                        key={slot.id}
-                                        className="flex w-full items-center rounded-[16px] border border-white/20 bg-white/20 text-white/95"
-                                        style={{
-                                          minHeight:
-                                            LANDSCAPE_PILL_MIN_HEIGHT * tileScale,
-                                          padding: `${tileUnit(4)}px ${tileUnit(10)}px`,
-                                          borderRadius:
-                                            LANDSCAPE_PILL_RADIUS * tileScale,
-                                        }}
-                                      >
+                                    day.streams.map((stream) => {
+                                      const slotCount = stream.times.length;
+                                      const slotScale =
+                                        Math.max(
+                                          0.72,
+                                          Math.min(
+                                            1,
+                                            1 - Math.max(0, slotCount - 2) * 0.12,
+                                          ),
+                                        ) * streamScale * streamPillScale;
+                                      const slotUnit = (value: number) =>
+                                        tileUnit(value) * slotScale;
+                                      const flagWidth =
+                                        LANDSCAPE_FLAG_WIDTH * tileScale * slotScale;
+                                      const flagHeight =
+                                        LANDSCAPE_FLAG_HEIGHT * tileScale * slotScale;
+                                      const emojiFont = Math.max(
+                                        10,
+                                        Math.round(flagHeight * 1.25),
+                                      );
+                                      const isStreamDragOver =
+                                        dragOverStreamId === stream.id &&
+                                        draggingStreamDayId === day.id;
+                                      const isStreamDragging =
+                                        draggingStreamId === stream.id &&
+                                        draggingStreamDayId === day.id;
+                                      const streamDropIndicator =
+                                        isStreamDragOver && dragOverStreamPosition
+                                          ? dragOverStreamPosition
+                                          : null;
+                                      const streamBackground = stream.thumbUrl
+                                        ? `${thumbOverlay}, linear-gradient(180deg, rgba(8,8,14,0.55), rgba(8,8,14,0.55)), url("${stream.thumbUrl}")`
+                                        : `${thumbOverlay}, linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0))`;
+
+                                      return (
                                         <div
-                                          className="flex w-full items-center"
-                                          style={{ gap: tileUnit(8) }}
+                                          key={stream.id}
+                                          className="relative flex min-h-0 flex-1"
                                         >
-                                          <span
-                                            className="overflow-hidden rounded-[3px] shadow-[0_0_0_1px_rgba(255,255,255,0.18)]"
+                                          {streamDropIndicator ? (
+                                            <div
+                                              aria-hidden="true"
+                                              className="pointer-events-none absolute left-0 right-0"
+                                              style={{
+                                                top:
+                                                  streamDropIndicator === "before"
+                                                    ? streamUnit(-6)
+                                                    : "auto",
+                                                bottom:
+                                                  streamDropIndicator === "after"
+                                                    ? streamUnit(-6)
+                                                    : "auto",
+                                                height: streamUnit(4),
+                                                borderRadius: streamUnit(4),
+                                                background: dropIndicatorHorizontal,
+                                                boxShadow: dropIndicatorShadow,
+                                                zIndex: 15,
+                                              }}
+                                            />
+                                          ) : null}
+                                          <div
+                                            className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/15 bg-white/10 text-white/95"
+                                            draggable={canEdit && day.streams.length > 1}
+                                            onDragStart={(event) =>
+                                              handleStreamDragStart(
+                                                event,
+                                                day.id,
+                                                stream.id,
+                                              )
+                                            }
+                                            onDragOver={(event) =>
+                                              handleStreamDragOver(
+                                                event,
+                                                day.id,
+                                                stream.id,
+                                                "y",
+                                              )
+                                            }
+                                            onDragLeave={handleStreamDragLeave}
+                                            onDrop={(event) =>
+                                              handleStreamDrop(
+                                                event,
+                                                day.id,
+                                                stream.id,
+                                                "y",
+                                              )
+                                            }
+                                            onDragEnd={handleStreamDragEnd}
                                             style={{
-                                              width:
-                                                LANDSCAPE_FLAG_WIDTH * tileScale,
-                                              height:
-                                                LANDSCAPE_FLAG_HEIGHT * tileScale,
+                                              gap: streamUnit(6),
+                                              padding: `${streamUnit(8)}px ${streamUnit(
+                                                10,
+                                              )}px`,
+                                              backgroundImage: streamBackground,
+                                              backgroundSize: "cover",
+                                              backgroundPosition: "center",
+                                              backgroundBlendMode:
+                                                "screen, normal, normal",
+                                              outlineColor: accentGlow,
+                                              outlineWidth: isStreamDragOver
+                                                ? tileUnit(1.5)
+                                                : undefined,
+                                              outlineStyle: isStreamDragOver
+                                                ? "solid"
+                                                : undefined,
+                                              outlineOffset: isStreamDragOver
+                                                ? tileUnit(2)
+                                                : 0,
+                                              opacity: isStreamDragging ? 0.7 : 1,
                                             }}
                                           >
-                                            {slot.zoneId === "custom" &&
-                                            slot.customEmoji ? (
-                                              <span
-                                                className="flex h-full w-full items-center justify-center"
+                                          <div
+                                            className="font-black leading-[1.16] tracking-[-0.01em]"
+                                            style={{
+                                              fontSize: streamFont(
+                                                LANDSCAPE_TITLE_SIZE,
+                                              ),
+                                              display: "-webkit-box",
+                                              WebkitLineClamp: 2,
+                                              WebkitBoxOrient: "vertical",
+                                              overflow: "hidden",
+                                              wordBreak: "break-word",
+                                            }}
+                                          >
+                                            {stream.title || "Untitled stream"}
+                                          </div>
+                                          <div
+                                            className="flex flex-col"
+                                            style={{ gap: slotUnit(6) }}
+                                          >
+                                            {stream.times.length === 0 ? (
+                                              <div
+                                                className="w-full rounded-[14px] border border-white/20 bg-white/5 font-semibold uppercase tracking-[0.14em] text-white/70"
                                                 style={{
-                                                  fontSize: tileFont(11),
+                                                  minHeight:
+                                                    LANDSCAPE_PILL_MIN_HEIGHT *
+                                                    tileScale *
+                                                    slotScale,
+                                                  padding: `${slotUnit(6)}px ${slotUnit(
+                                                    8,
+                                                  )}px`,
+                                                  fontSize: Math.max(
+                                                    9,
+                                                    Math.round(
+                                                      tileFont(10) * slotScale,
+                                                    ),
+                                                  ),
                                                 }}
                                               >
-                                                {slot.customEmoji}
-                                              </span>
+                                                Add time slot
+                                              </div>
                                             ) : (
-                                              <FlagIcon flag={slot.flag} />
+                                              stream.times.map((slot) => {
+                                                const hasCustomEmoji =
+                                                  slot.zoneId === "custom" &&
+                                                  Boolean(slot.customEmoji);
+
+                                                return (
+                                                  <div
+                                                    key={slot.id}
+                                                    className="flex w-full items-center rounded-[14px] border border-white/20 bg-white/20 text-white/95"
+                                                    style={{
+                                                      minHeight:
+                                                        LANDSCAPE_PILL_MIN_HEIGHT *
+                                                        tileScale *
+                                                        slotScale,
+                                                      padding: `${slotUnit(
+                                                        4,
+                                                      )}px ${slotUnit(8)}px`,
+                                                      borderRadius:
+                                                        LANDSCAPE_PILL_RADIUS *
+                                                        tileScale *
+                                                        slotScale,
+                                                    }}
+                                                  >
+                                                    <div
+                                                      className="flex w-full items-center"
+                                                      style={{ gap: slotUnit(6) }}
+                                                    >
+                                                      <span
+                                                        className={`overflow-hidden rounded-[3px] ${
+                                                          hasCustomEmoji
+                                                            ? "shadow-none"
+                                                            : "shadow-[0_0_0_1px_rgba(255,255,255,0.18)]"
+                                                        }`}
+                                                        style={{
+                                                          width: flagWidth,
+                                                          height: flagHeight,
+                                                        }}
+                                                      >
+                                                        {hasCustomEmoji ? (
+                                                          <span
+                                                            className="flex h-full w-full items-center justify-center"
+                                                            style={{
+                                                              fontSize: emojiFont,
+                                                              lineHeight: 1,
+                                                            }}
+                                                          >
+                                                            {slot.customEmoji}
+                                                          </span>
+                                                        ) : (
+                                                          <FlagIcon
+                                                            flag={slot.flag}
+                                                          />
+                                                        )}
+                                                      </span>
+                                                      <span
+                                                        className="min-w-0 truncate font-black uppercase tracking-widest text-white/80"
+                                                        style={{
+                                                          fontSize: Math.max(
+                                                            9,
+                                                            Math.round(
+                                                              tileFont(
+                                                                LANDSCAPE_TZ_SIZE,
+                                                              ) * slotScale,
+                                                            ),
+                                                          ),
+                                                        }}
+                                                      >
+                                                        {slot.label}
+                                                      </span>
+                                                      <span
+                                                        className="font-black whitespace-nowrap"
+                                                        style={{
+                                                          marginLeft: "auto",
+                                                          fontSize: Math.max(
+                                                            9,
+                                                            Math.round(
+                                                              tileFont(
+                                                                LANDSCAPE_TIME_SIZE,
+                                                              ) * slotScale,
+                                                            ),
+                                                          ),
+                                                        }}
+                                                      >
+                                                        {slot.time}
+                                                      </span>
+                                                    </div>
+                                                  </div>
+                                                );
+                                              })
                                             )}
-                                          </span>
-                                          <span
-                                            className="min-w-0 truncate font-black uppercase tracking-[0.1em] text-white/80"
-                                            style={{
-                                              fontSize: tileFont(
-                                                LANDSCAPE_TZ_SIZE,
-                                              ),
-                                            }}
-                                          >
-                                            {slot.label}
-                                          </span>
-                                          <span
-                                            className="font-black"
-                                            style={{
-                                              marginLeft: "auto",
-                                              fontSize: tileFont(
-                                                LANDSCAPE_TIME_SIZE,
-                                              ),
-                                            }}
-                                          >
-                                            {slot.time}
-                                          </span>
+                                          </div>
+                                          </div>
                                         </div>
-                                      </div>
-                                    ))
+                                      );
+                                    })
                                   )}
                                 </div>
-                              </div>
-                            ) : null}
+                              ) : null}
+                            </div>
                               </button>
                                 {canEdit && isSelected ? (
                                   <button
@@ -848,7 +1804,7 @@ export default function StorySchedulePreview({
                                     aria-label="Delete day"
                                     onClick={(event) => {
                                       event.stopPropagation();
-                                      onDeleteDay(day.id);
+                                      onDeleteDayAction(day.id);
                                     }}
                                     className="absolute flex items-center justify-center rounded-full bg-red-500 text-white shadow-[0_6px_18px_rgba(0,0,0,0.35)] transition hover:bg-red-600"
                                     style={{
@@ -871,7 +1827,7 @@ export default function StorySchedulePreview({
                       {showAddControls ? (
                         <button
                           type="button"
-                          onClick={() => onAddDay("bottom")}
+                          onClick={() => onAddDayAction("bottom")}
                           disabled={!canAddDay}
                           className={addDayButtonClass}
                           style={{
@@ -900,25 +1856,30 @@ export default function StorySchedulePreview({
                   <footer className="flex justify-center">
                     <button
                       type="button"
-                      onClick={onSelectFooter}
+                      onClick={onSelectFooterAction}
                       aria-pressed={isFooterSelected}
-                      className={`inline-flex items-center rounded-full font-black leading-none tracking-[0.02em] text-white/95 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${footerClass}`}
+                      className={`inline-flex items-center rounded-full font-black leading-none tracking-[0.02em] text-white/95 transition focus-visible:outline focus-visible:outline-offset-2 ${footerClass}`}
                       style={{
                         minHeight: landscapeFooterHeight,
                         padding: `${landscapeFooterMetrics.paddingY}px ${landscapeFooterMetrics.paddingX}px`,
                         fontSize: landscapeFooterMetrics.fontSize,
                         gap: landscapeFooterMetrics.gap,
+                        outlineColor: accent,
+                        backgroundColor: footerSurface,
+                        borderColor,
+                        fontFamily: headingFont,
                         boxShadow: isFooterSelected
-                          ? `0 0 0 ${landscapeUnit(1.5)}px rgba(56,189,248,0.85) inset`
-                          : `0 0 0 ${landscapeUnit(1)}px rgba(255,255,255,0.24) inset`,
+                          ? `0 0 0 ${landscapeUnit(1.5)}px ${accentGlow} inset`
+                          : `0 0 0 ${landscapeUnit(1)}px ${borderColor} inset`,
                       }}
                     >
                       <span
-                        className="rounded-full bg-red-500"
+                        className="rounded-full"
                         style={{
                           width: landscapeFooterMetrics.dotSize,
                           height: landscapeFooterMetrics.dotSize,
-                          boxShadow: `0 0 0 ${landscapeFooterMetrics.dotShadow}px rgba(255,45,45,0.16)`,
+                          backgroundColor: liveColor,
+                          boxShadow: `0 0 0 ${landscapeFooterMetrics.dotShadow}px ${liveGlow}`,
                         }}
                       />
                       {footerLink || "twitch.tv/yourname"}
@@ -937,7 +1898,7 @@ export default function StorySchedulePreview({
     <div className="flex w-full justify-center">
       <div
         ref={wrapperRef}
-        className="relative w-full max-w-[520px]"
+        className="relative w-full max-w-130"
         style={{ aspectRatio: `${canvasWidth} / ${canvasHeight}` }}
       >
         <div
@@ -952,10 +1913,17 @@ export default function StorySchedulePreview({
           }}
         >
           <div
-            className={`relative h-full w-full overflow-hidden rounded-[38px] border border-white/10 text-white ${
+            className={`relative h-full w-full overflow-hidden border text-white ${
               isExporting ? "shadow-none" : "shadow-[0_28px_85px_rgba(0,0,0,0.58)]"
             }`}
-            style={{ backgroundImage: canvasBackground }}
+            style={{
+              backgroundImage: background,
+              borderColor,
+              borderWidth: frameBorderWidthScaled,
+              borderStyle: "solid",
+              borderRadius: frameRadiusScaled,
+              fontFamily: bodyFont,
+            }}
           >
             <div
               className="absolute inset-0 flex flex-col justify-center"
@@ -973,21 +1941,25 @@ export default function StorySchedulePreview({
                 >
                   <button
                     type="button"
-                    onClick={onSelectHeader}
+                    onClick={onSelectHeaderAction}
                     aria-pressed={isHeaderSelected}
-                    className={`w-full rounded-[24px] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${
-                      isHeaderSelected
-                        ? "ring-2 ring-cyan-300/80 bg-white/5"
-                        : "ring-1 ring-transparent"
-                    }`}
+                    className="w-full transition"
                     style={{
                       textAlign: headerAlign,
                       color: headerColor,
+                      borderRadius: Math.max(12, cardRadiusScaled * 0.8),
+                      backgroundColor: isHeaderSelected ? cardSurface : "transparent",
+                      boxShadow: isHeaderSelected
+                        ? `0 0 0 ${scaleUnit(2)}px ${accentGlow} inset`
+                        : canEdit
+                          ? `0 0 0 ${scaleUnit(1)}px ${borderColor} inset`
+                          : "none",
                     }}
                   >
                     <span
-                      className="text-[56px] font-black leading-[1.05] tracking-[-0.02em] break-words"
+                      className="text-[56px] font-black leading-[1.05] tracking-[-0.02em] wrap-break-word"
                       style={{
+                        fontFamily: headingFont,
                         fontSize: headerFontSize,
                         lineHeight: headerLineHeight,
                         paddingBottom: headerPadding,
@@ -1013,7 +1985,7 @@ export default function StorySchedulePreview({
                   {days.length === 0 ? (
                     <div className="flex flex-col" style={{ gap: scaledGap }}>
                       <div
-                        className="rounded-[28px] border border-dashed border-white/20 bg-white/5 px-6 py-10 text-center text-sm text-white/70"
+                        className="rounded-[28px] border border-white/20 bg-white/5 px-6 py-10 text-center text-sm text-white/70"
                         style={{
                           height: scaledEmptyStateHeight,
                           padding: `${scaleY(40)}px ${scaleX(24)}px`,
@@ -1033,6 +2005,13 @@ export default function StorySchedulePreview({
                   {days.map((day) => {
                     const isSelected =
                       selectedTarget === "day" && day.id === selectedDayId;
+                    const isDragging = draggingDayId === day.id;
+                    const isDragOver =
+                      dragOverDayId === day.id && draggingDayId !== day.id;
+                    const dropIndicator =
+                      isDragOver && dragOverPosition && !draggingStreamId
+                        ? dragOverPosition
+                        : null;
                     if (day.off) {
                       return (
                         <div
@@ -1040,28 +2019,71 @@ export default function StorySchedulePreview({
                           className="relative"
                           style={{ minWidth: 0 }}
                         >
+                          {dropIndicator ? (
+                            <div
+                              aria-hidden="true"
+                              className="pointer-events-none absolute left-0 right-0"
+                              style={{
+                                top:
+                                  dropIndicator === "before"
+                                    ? scaleUnit(-6)
+                                    : "auto",
+                                bottom:
+                                  dropIndicator === "after"
+                                    ? scaleUnit(-6)
+                                    : "auto",
+                                height: scaleUnit(4),
+                                borderRadius: scaleUnit(4),
+                                background: dropIndicatorHorizontal,
+                                boxShadow: dropIndicatorShadow,
+                                zIndex: 12,
+                              }}
+                            />
+                          ) : null}
                           <button
                             type="button"
-                            onClick={() => onSelectDay(day.id)}
+                            onClick={() => onSelectDayAction(day.id)}
+                            draggable={canEdit}
+                            onDragStart={(event) => handleDragStart(event, day.id)}
+                            onDragOver={(event) =>
+                              handleDragOver(event, day.id, "y")
+                            }
+                            onDragLeave={handleDragLeave}
+                            onDrop={(event) => handleDrop(event, day.id, "y")}
+                            onDragEnd={handleDragEnd}
                             aria-pressed={isSelected}
-                            className="grid h-[140px] w-full grid-cols-[220px_1fr] gap-[18px] rounded-[28px] border-2 border-dashed border-white/30 bg-white/5 p-4 text-left backdrop-blur-[10px] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+                            className={`grid h-35 w-full grid-cols-[220px_1fr] gap-4.5 border p-4 text-left backdrop-blur-[10px] transition focus-visible:outline focus-visible:outline-offset-2 ${
+                              canEdit ? "cursor-grab active:cursor-grabbing" : ""
+                            }`}
                             style={{
                               height: scaledOffDayCardHeight,
                               gridTemplateColumns: `${scaledOffDayThumbWidth}px 1fr`,
                               gap: scaleUnit(18),
                               padding: `${scaleY(16)}px ${scaleX(16)}px`,
-                              boxShadow: isSelected
-                                ? `0 0 0 ${scaleUnit(2)}px rgba(56,189,248,0.85) inset`
-                                : "none",
+                              borderRadius: cardRadiusScaled,
+                              borderColor,
+                              borderWidth: dashedBorderWidth,
+                              borderStyle: "dashed",
+                              backgroundColor: cardSurfaceStrong,
+                              outlineColor: isDragOver ? accentGlow : accent,
+                              boxShadow:
+                                isSelected && useInsetGlow
+                                  ? `0 0 0 ${selectedCardGlowWidth}px ${accentGlow} inset`
+                                  : "none",
+                              outlineWidth: isDragOver
+                                ? scaleUnit(1.5)
+                                : undefined,
+                              outlineStyle: isDragOver ? "solid" : undefined,
+                              outlineOffset: isDragOver ? scaleUnit(2) : 0,
+                              opacity: isDragging ? 0.6 : 1,
                             }}
                           >
                             <div
-                              className="relative aspect-[16/9] w-full max-h-full self-center overflow-hidden rounded-[18px]"
+                              className="relative aspect-video w-full max-h-full self-center overflow-hidden rounded-[18px]"
                               style={{
-                                backgroundImage:
-                                  "linear-gradient(135deg, rgba(124,58,237,0.1), rgba(34,211,238,0.06))",
+                                backgroundImage: thumbOverlay,
                                 backgroundColor: "rgba(0,0,0,0.18)",
-                                boxShadow: `0 0 0 ${scaleUnit(1)}px rgba(255,255,255,0.18) inset`,
+                                boxShadow: `0 0 0 ${scaleUnit(1)}px ${borderColor} inset`,
                               }}
                             />
                             <div
@@ -1080,7 +2102,7 @@ export default function StorySchedulePreview({
                                 className="text-[18px] font-semibold text-white/70"
                                 style={{ fontSize: scaleFont(18) }}
                               >
-                                No stream scheduled
+                                No streams scheduled
                               </div>
                             </div>
                           </button>
@@ -1090,7 +2112,7 @@ export default function StorySchedulePreview({
                               aria-label="Delete day"
                               onClick={(event) => {
                                 event.stopPropagation();
-                                onDeleteDay(day.id);
+                                onDeleteDayAction(day.id);
                               }}
                               className="absolute flex items-center justify-center rounded-full bg-red-500 text-white shadow-[0_6px_18px_rgba(0,0,0,0.35)] transition hover:bg-red-600"
                               style={{
@@ -1108,30 +2130,299 @@ export default function StorySchedulePreview({
                       );
                     }
 
-                    const backgroundImage = day.thumbUrl
-                      ? `${thumbOverlay}, url("${day.thumbUrl}")`
-                      : `${thumbOverlay}, linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0))`;
-                    const slotCount = day.times.length;
-                    const timeScale = Math.max(
-                      0.58,
-                      Math.min(1, 1 - Math.max(0, slotCount - 2) * 0.12),
+                    const streamCount = day.streams.length;
+                    const primaryStream = day.streams[0] ?? {
+                      id: "stream-empty",
+                      title: "",
+                      thumbUrl: "",
+                      baseTime: "20:30",
+                      times: [],
+                    };
+
+                    if (streamCount <= 1) {
+                      const slotCount = primaryStream.times.length;
+                      const timeScale = Math.max(
+                        0.58,
+                        Math.min(1, 1 - Math.max(0, slotCount - 2) * 0.12),
+                      );
+                      const timeGap = scaleUnit(10) * timeScale;
+                      const timePaddingY = scaleY(12) * timeScale;
+                      const timePaddingX = scaleX(14) * timeScale;
+                      const timeFont = Math.max(
+                        10,
+                        Math.round(scaleFont(18) * timeScale),
+                      );
+                      const timeLabelFont = Math.max(
+                        9,
+                        Math.round(scaleFont(13) * timeScale),
+                      );
+                      const timeFlagWidth = scaleUnit(20) * timeScale;
+                      const timeFlagHeight = scaleUnit(14) * timeScale;
+                      const timeEmojiFont = Math.max(
+                        10,
+                        Math.round(timeFlagHeight * 1.25),
+                      );
+                      const timeWrap = slotCount > 0 ? "nowrap" : "wrap";
+                      const backgroundImage = primaryStream.thumbUrl
+                        ? `${thumbOverlay}, url("${primaryStream.thumbUrl}")`
+                        : `${thumbOverlay}, linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0))`;
+
+                      return (
+                        <div
+                          key={day.id}
+                          className="relative"
+                          style={{ minWidth: 0 }}
+                        >
+                          {dropIndicator ? (
+                            <div
+                              aria-hidden="true"
+                              className="pointer-events-none absolute left-0 right-0"
+                              style={{
+                                top:
+                                  dropIndicator === "before"
+                                    ? scaleUnit(-6)
+                                    : "auto",
+                                bottom:
+                                  dropIndicator === "after"
+                                    ? scaleUnit(-6)
+                                    : "auto",
+                                height: scaleUnit(4),
+                                borderRadius: scaleUnit(4),
+                                background: dropIndicatorHorizontal,
+                                boxShadow: dropIndicatorShadow,
+                                zIndex: 12,
+                              }}
+                            />
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={() => onSelectDayAction(day.id)}
+                            draggable={canEdit}
+                            onDragStart={(event) => handleDragStart(event, day.id)}
+                            onDragOver={(event) =>
+                              handleDragOver(event, day.id, "y")
+                            }
+                            onDragLeave={handleDragLeave}
+                            onDrop={(event) => handleDrop(event, day.id, "y")}
+                            onDragEnd={handleDragEnd}
+                            aria-pressed={isSelected}
+                            className={`grid h-62.5 w-full grid-cols-[260px_1fr] gap-5 border p-5 text-left backdrop-blur-[10px] transition focus-visible:outline focus-visible:outline-offset-2 ${
+                              canEdit ? "cursor-grab active:cursor-grabbing" : ""
+                            }`}
+                            style={{
+                              height: scaledDayCardHeight,
+                              gridTemplateColumns: `${scaledDayThumbWidth}px 1fr`,
+                              gap: scaleUnit(20),
+                              padding: `${scaleY(20)}px ${scaleX(20)}px`,
+                              borderRadius: cardRadiusScaled,
+                              borderColor: isSelected ? accent : borderColor,
+                              borderWidth: cardBorderWidthRender,
+                              borderStyle: "solid",
+                              backgroundColor: cardSurface,
+                              outlineColor: isDragOver ? accentGlow : accent,
+                              boxShadow:
+                                isSelected && useInsetGlow
+                                  ? `0 0 0 ${selectedCardGlowWidth}px ${accentGlow} inset`
+                                  : "none",
+                              outlineWidth: isDragOver
+                                ? scaleUnit(1.5)
+                                : undefined,
+                              outlineStyle: isDragOver ? "solid" : undefined,
+                              outlineOffset: isDragOver ? scaleUnit(2) : 0,
+                              opacity: isDragging ? 0.6 : 1,
+                            }}
+                          >
+                            <div
+                              className="relative aspect-video w-full max-h-full self-center overflow-hidden rounded-[20px]"
+                              style={{
+                                backgroundImage,
+                                backgroundColor: "rgba(0,0,0,0.2)",
+                                backgroundSize: "cover",
+                                backgroundPosition: "center",
+                                backgroundBlendMode: "screen, normal",
+                                boxShadow: `0 0 0 ${scaleUnit(1)}px ${borderColor} inset`,
+                              }}
+                            >
+                              <div
+                                className="absolute left-3 top-3 inline-flex items-center gap-2 rounded-full bg-black/40 px-3 py-2 text-[13px] font-black uppercase tracking-widest text-white/95"
+                                style={{
+                                  left: scaleX(12),
+                                  top: scaleY(12),
+                                  gap: scaleUnit(8),
+                                  padding: `${scaleY(8)}px ${scaleX(12)}px`,
+                                  fontSize: scaleFont(13),
+                                  boxShadow: `0 0 0 ${scaleUnit(1)}px rgba(255,255,255,0.24) inset`,
+                                }}
+                              >
+                                <span
+                                  className="h-2.5 w-2.5 rounded-full"
+                                  style={{
+                                    width: scaleUnit(10),
+                                    height: scaleUnit(10),
+                                    backgroundColor: liveColor,
+                                    boxShadow: `0 0 0 ${scaleUnit(
+                                      6,
+                                    )}px ${liveGlow}`,
+                                  }}
+                                />
+                                <span>Live</span>
+                              </div>
+                            </div>
+                            <div className="flex min-w-0 flex-col justify-center gap-3">
+                              <div className="flex flex-wrap items-center gap-3">
+                                <div
+                                  className="text-[20px] font-black uppercase tracking-[0.08em] text-white/80"
+                                  style={{ fontSize: scaleFont(20) }}
+                                >
+                                  {day.day}
+                                </div>
+                                <div
+                                  className="inline-flex items-center rounded-full bg-white/10 px-3 py-2 text-[13px] font-black uppercase tracking-[0.06em] text-white/85"
+                                  style={{
+                                    padding: `${scaleY(8)}px ${scaleX(12)}px`,
+                                    fontSize: scaleFont(13),
+                                    boxShadow: `0 0 0 ${scaleUnit(1)}px rgba(255,255,255,0.24) inset`,
+                                  }}
+                                >
+                                  {day.date || "TBD"}
+                                </div>
+                              </div>
+                              <div
+                                className="text-[38px] font-black leading-[1.12] tracking-[-0.02em]"
+                                style={{
+                                  fontFamily: headingFont,
+                                  fontSize: scaleFont(38),
+                                  lineHeight: 1.24,
+                                  display: "-webkit-box",
+                                  WebkitLineClamp: 2,
+                                  WebkitBoxOrient: "vertical",
+                                  overflow: "hidden",
+                                  wordBreak: "break-word",
+                                  paddingBottom: scaleY(8),
+                                }}
+                              >
+                                {primaryStream.title || "Untitled stream"}
+                              </div>
+                              <div
+                                className="items-center"
+                                style={{
+                                  display: "flex",
+                                  flexWrap: timeWrap,
+                                  gap: slotCount > 0 ? timeGap : scaleUnit(10),
+                                }}
+                              >
+                                {primaryStream.times.length === 0 ? (
+                                  <div
+                                    className="rounded-full bg-white/5 px-4 py-3 text-[13px] font-semibold uppercase tracking-[0.2em] text-white/70"
+                                    style={{
+                                      padding: `${timePaddingY}px ${timePaddingX}px`,
+                                      fontSize: Math.max(
+                                        9,
+                                        Math.round(scaleFont(12) * timeScale),
+                                      ),
+                                      boxShadow: `0 0 0 ${scaleUnit(
+                                        1,
+                                      )}px rgba(255,255,255,0.22) inset`,
+                                    }}
+                                  >
+                                    Add time slot
+                                  </div>
+                                ) : (
+                                  primaryStream.times.map((slot) => {
+                                    const hasCustomEmoji =
+                                      slot.zoneId === "custom" &&
+                                      Boolean(slot.customEmoji);
+
+                                    return (
+                                      <div
+                                        key={slot.id}
+                                        className="min-w-0 inline-flex items-center rounded-full bg-white/10 text-[18px] font-extrabold text-white/95"
+                                        style={{
+                                          flex: "0 1 auto",
+                                          width: "fit-content",
+                                          maxWidth: "100%",
+                                          gap: timeGap,
+                                          padding: `${timePaddingY}px ${timePaddingX}px`,
+                                          fontSize: timeFont,
+                                          boxShadow: `0 0 0 ${scaleUnit(
+                                            1,
+                                          )}px rgba(255,255,255,0.24) inset`,
+                                        }}
+                                      >
+                                        <span
+                                          className={`h-3.5 w-5 overflow-hidden rounded-[3px] ${
+                                            hasCustomEmoji
+                                              ? "shadow-none"
+                                              : "shadow-[0_0_0_1px_rgba(255,255,255,0.18)]"
+                                          }`}
+                                          style={{
+                                            width: timeFlagWidth,
+                                            height: timeFlagHeight,
+                                          }}
+                                        >
+                                          {hasCustomEmoji ? (
+                                            <span
+                                              className="flex h-full w-full items-center justify-center"
+                                              style={{
+                                                fontSize: timeEmojiFont,
+                                                lineHeight: 1,
+                                              }}
+                                            >
+                                              {slot.customEmoji}
+                                            </span>
+                                          ) : (
+                                            <FlagIcon flag={slot.flag} />
+                                          )}
+                                        </span>
+                                        <span
+                                          className="min-w-0 truncate text-[13px] font-black uppercase tracking-[0.08em] text-white/80"
+                                          style={{ fontSize: timeLabelFont }}
+                                        >
+                                          {slot.label}
+                                        </span>
+                                        <span className="whitespace-nowrap">
+                                          {slot.time}
+                                        </span>
+                                      </div>
+                                    );
+                                  })
+                                )}
+                              </div>
+                            </div>
+                          </button>
+                          {canEdit && isSelected ? (
+                            <button
+                              type="button"
+                              aria-label="Delete day"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                onDeleteDayAction(day.id);
+                              }}
+                              className="absolute flex items-center justify-center rounded-full bg-red-500 text-white shadow-[0_6px_18px_rgba(0,0,0,0.35)] transition hover:bg-red-600"
+                              style={{
+                                top: scaleY(10),
+                                right: scaleX(10),
+                                width: scaleUnit(26),
+                                height: scaleUnit(26),
+                                zIndex: 5,
+                                fontSize: scaleFont(14),
+                              }}
+                            >
+                              x
+                            </button>
+                          ) : null}
+                        </div>
+                      );
+                    }
+
+                    const streamScale = Math.max(
+                      0.7,
+                      1 - Math.max(0, streamCount - 1) * 0.15,
                     );
-                    const timeGap = scaleUnit(10) * timeScale;
-                    const timePaddingY = scaleY(12) * timeScale;
-                    const timePaddingX = scaleX(14) * timeScale;
-                    const timeFont = Math.max(
-                      10,
-                      Math.round(scaleFont(18) * timeScale),
-                    );
-                    const timeLabelFont = Math.max(
-                      9,
-                      Math.round(scaleFont(13) * timeScale),
-                    );
-                    const timeFlagWidth = scaleUnit(20) * timeScale;
-                    const timeFlagHeight = scaleUnit(14) * timeScale;
-                    const timeEmojiFont = Math.max(
-                      9,
-                      Math.round(scaleFont(12) * timeScale),
+                    const streamGap = scaleUnit(12) * streamScale;
+                    const streamTitleFont = Math.max(
+                      12,
+                      Math.round(scaleFont(30) * streamScale),
                     );
 
                     return (
@@ -1140,150 +2431,341 @@ export default function StorySchedulePreview({
                         className="relative"
                         style={{ minWidth: 0 }}
                       >
+                        {dropIndicator ? (
+                          <div
+                            aria-hidden="true"
+                            className="pointer-events-none absolute left-0 right-0"
+                            style={{
+                              top:
+                                dropIndicator === "before"
+                                  ? scaleUnit(-6)
+                                  : "auto",
+                              bottom:
+                                dropIndicator === "after"
+                                  ? scaleUnit(-6)
+                                  : "auto",
+                              height: scaleUnit(4),
+                              borderRadius: scaleUnit(4),
+                              background: dropIndicatorHorizontal,
+                              boxShadow: dropIndicatorShadow,
+                              zIndex: 12,
+                            }}
+                          />
+                        ) : null}
                         <button
                           type="button"
-                          onClick={() => onSelectDay(day.id)}
+                          onClick={() => onSelectDayAction(day.id)}
+                          draggable={canEdit}
+                          onDragStart={(event) => handleDragStart(event, day.id)}
+                          onDragOver={(event) =>
+                            handleDragOver(event, day.id, "y")
+                          }
+                          onDragLeave={handleDragLeave}
+                          onDrop={(event) => handleDrop(event, day.id, "y")}
+                          onDragEnd={handleDragEnd}
                           aria-pressed={isSelected}
-                          className="grid h-[250px] w-full grid-cols-[260px_1fr] gap-5 rounded-[28px] bg-white/10 p-5 text-left backdrop-blur-[10px] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+                          className={`flex min-h-0 h-62.5 w-full flex-col border p-5 text-left backdrop-blur-[10px] transition focus-visible:outline focus-visible:outline-offset-2 ${
+                            canEdit ? "cursor-grab active:cursor-grabbing" : ""
+                          }`}
                           style={{
                             height: scaledDayCardHeight,
-                            gridTemplateColumns: `${scaledDayThumbWidth}px 1fr`,
-                            gap: scaleUnit(20),
-                            padding: `${scaleY(20)}px ${scaleX(20)}px`,
-                            boxShadow: isSelected
-                              ? `0 0 0 ${scaleUnit(2)}px rgba(56,189,248,0.85) inset`
-                              : `0 0 0 ${scaleUnit(1.5)}px rgba(255,255,255,0.18) inset`,
+                            gap: scaleUnit(12),
+                            padding: `${scaleY(18)}px ${scaleX(18)}px`,
+                            borderRadius: cardRadiusScaled,
+                            borderColor: isSelected ? accent : borderColor,
+                            borderWidth: cardBorderWidthRender,
+                            borderStyle: "solid",
+                            backgroundColor: cardSurface,
+                            outlineColor: isDragOver ? accentGlow : accent,
+                            boxShadow:
+                              isSelected && useInsetGlow
+                                ? `0 0 0 ${selectedCardGlowWidth}px ${accentGlow} inset`
+                                : "none",
+                            outlineWidth: isDragOver
+                              ? scaleUnit(1.5)
+                              : undefined,
+                            outlineStyle: isDragOver ? "solid" : undefined,
+                            outlineOffset: isDragOver ? scaleUnit(2) : 0,
+                            opacity: isDragging ? 0.6 : 1,
                           }}
                         >
-                        <div
-                          className="relative aspect-[16/9] w-full max-h-full self-center overflow-hidden rounded-[20px]"
-                          style={{
-                            backgroundImage,
-                            backgroundColor: "rgba(0,0,0,0.2)",
-                            backgroundSize: "cover",
-                            backgroundPosition: "center",
-                            backgroundBlendMode: "screen, normal",
-                            boxShadow: `0 0 0 ${scaleUnit(1)}px rgba(255,255,255,0.18) inset`,
-                          }}
-                        >
+                        <div className="flex flex-wrap items-center gap-3">
                           <div
-                            className="absolute left-3 top-3 inline-flex items-center gap-2 rounded-full bg-black/40 px-3 py-2 text-[13px] font-black uppercase tracking-[0.1em] text-white/95"
+                            className="text-[20px] font-black uppercase tracking-[0.08em] text-white/80"
+                            style={{ fontSize: scaleFont(20) }}
+                          >
+                            {day.day}
+                          </div>
+                          <div
+                            className="inline-flex items-center rounded-full bg-white/10 px-3 py-2 text-[13px] font-black uppercase tracking-[0.06em] text-white/85"
                             style={{
-                              left: scaleX(12),
-                              top: scaleY(12),
-                              gap: scaleUnit(8),
                               padding: `${scaleY(8)}px ${scaleX(12)}px`,
                               fontSize: scaleFont(13),
                               boxShadow: `0 0 0 ${scaleUnit(1)}px rgba(255,255,255,0.24) inset`,
                             }}
                           >
-                            <span
-                              className="h-[10px] w-[10px] rounded-full bg-red-500 shadow-[0_0_0_6px_rgba(255,45,45,0.18)]"
-                              style={{
-                                width: scaleUnit(10),
-                                height: scaleUnit(10),
-                              }}
-                            />
-                            <span>Live</span>
+                            {day.date || "TBD"}
                           </div>
                         </div>
-                        <div className="flex min-w-0 flex-col justify-center gap-3">
-                          <div className="flex flex-wrap items-center gap-3">
+                        <div
+                          className="flex min-h-0 flex-1 items-stretch"
+                          style={{ gap: streamGap }}
+                        >
+                          {day.streams.length === 0 ? (
                             <div
-                              className="text-[20px] font-black uppercase tracking-[0.08em] text-white/80"
-                              style={{ fontSize: scaleFont(20) }}
-                            >
-                              {day.day}
-                            </div>
-                            <div
-                              className="inline-flex items-center rounded-full bg-white/10 px-3 py-2 text-[13px] font-black uppercase tracking-[0.06em] text-white/85"
+                              className="flex min-h-0 flex-1 items-center justify-center rounded-[20px] border border-dashed text-[12px] font-semibold uppercase tracking-[0.2em] text-white/70"
                               style={{
-                                padding: `${scaleY(8)}px ${scaleX(12)}px`,
-                                fontSize: scaleFont(13),
-                                boxShadow: `0 0 0 ${scaleUnit(1)}px rgba(255,255,255,0.24) inset`,
+                                fontSize: Math.max(
+                                  10,
+                                  Math.round(scaleFont(12) * streamScale),
+                                ),
+                                borderColor,
+                                borderWidth: dashedBorderWidth,
+                                backgroundColor: cardSurface,
                               }}
                             >
-                              {day.date || "TBD"}
+                              Add stream
                             </div>
-                          </div>
-                          <div
-                            className="text-[38px] font-black leading-[1.12] tracking-[-0.02em]"
-                            style={{
-                              fontSize: scaleFont(38),
-                              lineHeight: 1.24,
-                              display: "-webkit-box",
-                              WebkitLineClamp: 2,
-                              WebkitBoxOrient: "vertical",
-                              overflow: "hidden",
-                              wordBreak: "break-word",
-                              paddingBottom: scaleY(8),
-                            }}
-                          >
-                            {day.title || "Untitled stream"}
-                          </div>
-                          <div
-                            className="items-center"
-                            style={{
-                              display: "flex",
-                              flexWrap: slotCount > 0 ? "nowrap" : "wrap",
-                              gap: slotCount > 0 ? timeGap : scaleUnit(10),
-                            }}
-                          >
-                            {day.times.length === 0 ? (
-                              <div
-                                className="rounded-full bg-white/5 px-4 py-3 text-[13px] font-semibold uppercase tracking-[0.2em] text-white/70"
-                                style={{
-                                  padding: `${scaleY(12)}px ${scaleX(16)}px`,
-                                  fontSize: scaleFont(13),
-                                  boxShadow: `0 0 0 ${scaleUnit(1)}px rgba(255,255,255,0.22) inset`,
-                                }}
-                              >
-                                Add time slot
-                              </div>
-                            ) : (
-                              day.times.map((slot) => (
+                          ) : (
+                            day.streams.map((stream) => {
+                              const slotCount = stream.times.length;
+                              const timeScale =
+                                Math.max(
+                                  0.58,
+                                  Math.min(
+                                    1,
+                                    1 - Math.max(0, slotCount - 2) * 0.12,
+                                  ),
+                                ) * streamScale;
+                              const timeGap = scaleUnit(10) * timeScale;
+                              const timePaddingY = scaleY(12) * timeScale;
+                              const timePaddingX = scaleX(14) * timeScale;
+                              const timeFont = Math.max(
+                                10,
+                                Math.round(scaleFont(18) * timeScale),
+                              );
+                              const timeLabelFont = Math.max(
+                                9,
+                                Math.round(scaleFont(13) * timeScale),
+                              );
+                              const timeFlagWidth = scaleUnit(20) * timeScale;
+                              const timeFlagHeight = scaleUnit(14) * timeScale;
+                              const timeEmojiFont = Math.max(
+                                10,
+                                Math.round(timeFlagHeight * 1.25),
+                              );
+                              const timeWrap =
+                                streamCount > 1
+                                  ? "wrap"
+                                  : slotCount > 0
+                                    ? "nowrap"
+                                    : "wrap";
+                              const isStreamDragOver =
+                                dragOverStreamId === stream.id &&
+                                draggingStreamDayId === day.id;
+                              const isStreamDragging =
+                                draggingStreamId === stream.id &&
+                                draggingStreamDayId === day.id;
+                              const streamDropIndicator =
+                                isStreamDragOver && dragOverStreamPosition
+                                  ? dragOverStreamPosition
+                                  : null;
+                              const streamBackground = stream.thumbUrl
+                                ? `${thumbOverlay}, linear-gradient(180deg, rgba(8,8,14,0.55), rgba(8,8,14,0.55)), url("${stream.thumbUrl}")`
+                                : `${thumbOverlay}, linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0))`;
+
+                              return (
                                 <div
-                                  key={slot.id}
-                                  className="min-w-0 inline-flex items-center rounded-full bg-white/10 text-[18px] font-extrabold text-white/95"
-                                  style={{
-                                    flex: "0 1 auto",
-                                    width: "fit-content",
-                                    maxWidth: "100%",
-                                    gap: timeGap,
-                                    padding: `${timePaddingY}px ${timePaddingX}px`,
-                                    fontSize: timeFont,
-                                    boxShadow: `0 0 0 ${scaleUnit(1)}px rgba(255,255,255,0.24) inset`,
-                                  }}
+                                  key={stream.id}
+                                  className="relative flex min-h-0 flex-1"
                                 >
-                                  <span
-                                    className="h-[14px] w-[20px] overflow-hidden rounded-[3px] shadow-[0_0_0_1px_rgba(255,255,255,0.18)]"
+                                  {streamDropIndicator ? (
+                                    <div
+                                      aria-hidden="true"
+                                      className="pointer-events-none absolute top-0 bottom-0"
+                                      style={{
+                                        left:
+                                          streamDropIndicator === "before"
+                                            ? scaleUnit(-6)
+                                            : "auto",
+                                        right:
+                                          streamDropIndicator === "after"
+                                            ? scaleUnit(-6)
+                                            : "auto",
+                                        width: scaleUnit(4),
+                                        borderRadius: scaleUnit(4),
+                                        background: dropIndicatorVertical,
+                                        boxShadow: dropIndicatorShadow,
+                                        zIndex: 15,
+                                      }}
+                                    />
+                                  ) : null}
+                                  <div
+                                    className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border text-white/95"
+                                    draggable={canEdit && day.streams.length > 1}
+                                    onDragStart={(event) =>
+                                      handleStreamDragStart(
+                                        event,
+                                        day.id,
+                                        stream.id,
+                                      )
+                                    }
+                                    onDragOver={(event) =>
+                                      handleStreamDragOver(
+                                        event,
+                                        day.id,
+                                        stream.id,
+                                        "x",
+                                      )
+                                    }
+                                    onDragLeave={handleStreamDragLeave}
+                                    onDrop={(event) =>
+                                      handleStreamDrop(
+                                        event,
+                                        day.id,
+                                        stream.id,
+                                        "x",
+                                      )
+                                    }
+                                    onDragEnd={handleStreamDragEnd}
                                     style={{
-                                      width: timeFlagWidth,
-                                      height: timeFlagHeight,
+                                      gap: scaleUnit(8) * streamScale,
+                                      padding: `${scaleY(12) * streamScale}px ${
+                                        scaleX(12) * streamScale
+                                      }px`,
+                                      backgroundImage: streamBackground,
+                                      backgroundSize: "cover",
+                                      backgroundPosition: "center",
+                                      backgroundBlendMode:
+                                        "screen, normal, normal",
+                                      backgroundColor: cardSurfaceStrong,
+                                      borderColor,
+                                      borderWidth: Math.max(
+                                        portraitStreamBorderWidth,
+                                        cardBorderWidthRender,
+                                      ),
+                                      borderStyle: "solid",
+                                      outlineColor: accentGlow,
+                                      outlineWidth: isStreamDragOver
+                                        ? scaleUnit(1.5)
+                                        : undefined,
+                                      outlineStyle: isStreamDragOver
+                                        ? "solid"
+                                        : undefined,
+                                      outlineOffset: isStreamDragOver
+                                        ? scaleUnit(2)
+                                        : 0,
+                                      opacity: isStreamDragging ? 0.7 : 1,
                                     }}
                                   >
-                                    {slot.zoneId === "custom" && slot.customEmoji ? (
-                                      <span
-                                        className="flex h-full w-full items-center justify-center"
-                                        style={{ fontSize: timeEmojiFont }}
-                                      >
-                                        {slot.customEmoji}
-                                      </span>
-                                    ) : (
-                                      <FlagIcon flag={slot.flag} />
-                                    )}
-                                  </span>
-                                  <span
-                                    className="min-w-0 truncate text-[13px] font-black uppercase tracking-[0.08em] text-white/80"
-                                    style={{ fontSize: timeLabelFont }}
+                                  <div
+                                    className="font-black leading-[1.12] tracking-[-0.02em]"
+                                    style={{
+                                      fontFamily: headingFont,
+                                      fontSize: streamTitleFont,
+                                          display: "-webkit-box",
+                                          WebkitLineClamp: 2,
+                                          WebkitBoxOrient: "vertical",
+                                      overflow: "hidden",
+                                      wordBreak: "break-word",
+                                    }}
                                   >
-                                    {slot.label}
-                                  </span>
-                                  <span>{slot.time}</span>
+                                    {stream.title || "Untitled stream"}
+                                  </div>
+                                  <div
+                                    className="items-center"
+                                    style={{
+                                      display: "flex",
+                                      flexWrap: timeWrap,
+                                      gap: timeGap,
+                                    }}
+                                  >
+                                    {stream.times.length === 0 ? (
+                                      <div
+                                        className="rounded-full bg-white/5 px-4 py-3 text-[13px] font-semibold uppercase tracking-[0.2em] text-white/70"
+                                        style={{
+                                          padding: `${timePaddingY}px ${timePaddingX}px`,
+                                          fontSize: Math.max(
+                                            9,
+                                            Math.round(
+                                              scaleFont(12) * timeScale,
+                                            ),
+                                          ),
+                                          boxShadow: `0 0 0 ${scaleUnit(
+                                            1,
+                                          )}px rgba(255,255,255,0.22) inset`,
+                                        }}
+                                      >
+                                        Add time slot
+                                      </div>
+                                    ) : (
+                                      stream.times.map((slot) => {
+                                        const hasCustomEmoji =
+                                          slot.zoneId === "custom" &&
+                                          Boolean(slot.customEmoji);
+
+                                        return (
+                                          <div
+                                            key={slot.id}
+                                            className="min-w-0 inline-flex items-center rounded-full bg-white/10 text-[18px] font-extrabold text-white/95"
+                                            style={{
+                                              flex: "0 1 auto",
+                                              width: "fit-content",
+                                              maxWidth: "100%",
+                                              gap: timeGap,
+                                              padding: `${timePaddingY}px ${timePaddingX}px`,
+                                              fontSize: timeFont,
+                                              boxShadow: `0 0 0 ${scaleUnit(
+                                                1,
+                                              )}px rgba(255,255,255,0.24) inset`,
+                                            }}
+                                          >
+                                            <span
+                                              className={`h-3.5 w-5 overflow-hidden rounded-[3px] ${
+                                                hasCustomEmoji
+                                                  ? "shadow-none"
+                                                  : "shadow-[0_0_0_1px_rgba(255,255,255,0.18)]"
+                                              }`}
+                                              style={{
+                                                width: timeFlagWidth,
+                                                height: timeFlagHeight,
+                                              }}
+                                            >
+                                              {hasCustomEmoji ? (
+                                                <span
+                                                  className="flex h-full w-full items-center justify-center"
+                                                  style={{
+                                                    fontSize: timeEmojiFont,
+                                                    lineHeight: 1,
+                                                  }}
+                                                >
+                                                  {slot.customEmoji}
+                                                </span>
+                                              ) : (
+                                                <FlagIcon flag={slot.flag} />
+                                              )}
+                                            </span>
+                                            <span
+                                              className="min-w-0 truncate text-[13px] font-black uppercase tracking-[0.08em] text-white/80"
+                                              style={{
+                                                fontSize: timeLabelFont,
+                                              }}
+                                            >
+                                              {slot.label}
+                                            </span>
+                                            <span className="whitespace-nowrap">
+                                              {slot.time}
+                                            </span>
+                                          </div>
+                                        );
+                                      })
+                                    )}
+                                  </div>
+                                  </div>
                                 </div>
-                              ))
-                            )}
-                          </div>
+                              );
+                            })
+                          )}
                         </div>
                         </button>
                         {canEdit && isSelected ? (
@@ -1292,7 +2774,7 @@ export default function StorySchedulePreview({
                             aria-label="Delete day"
                             onClick={(event) => {
                               event.stopPropagation();
-                              onDeleteDay(day.id);
+                              onDeleteDayAction(day.id);
                             }}
                             className="absolute flex items-center justify-center rounded-full bg-red-500 text-white shadow-[0_6px_18px_rgba(0,0,0,0.35)] transition hover:bg-red-600"
                             style={{
@@ -1323,25 +2805,30 @@ export default function StorySchedulePreview({
                 >
                     <button
                       type="button"
-                      onClick={onSelectFooter}
+                      onClick={onSelectFooterAction}
                       aria-pressed={isFooterSelected}
-                      className={`inline-flex items-center rounded-full text-[38px] font-black leading-none tracking-[0.02em] text-white/95 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${footerClass}`}
+                      className={`inline-flex items-center rounded-full text-[38px] font-black leading-none tracking-[0.02em] text-white/95 transition focus-visible:outline focus-visible:outline-offset-2 ${footerClass}`}
                       style={{
                         minHeight: footerHeight,
                         padding: `${footerMetrics.paddingY}px ${footerMetrics.paddingX}px`,
                         fontSize: footerMetrics.fontSize,
                         gap: footerMetrics.gap,
+                        outlineColor: accent,
+                        backgroundColor: footerSurface,
+                        borderColor,
+                        fontFamily: headingFont,
                         boxShadow: isFooterSelected
-                          ? `0 0 0 ${scaleUnit(2)}px rgba(56,189,248,0.85) inset`
-                          : `0 0 0 ${scaleUnit(1)}px rgba(255,255,255,0.24) inset`,
+                          ? `0 0 0 ${scaleUnit(2)}px ${accentGlow} inset`
+                          : `0 0 0 ${scaleUnit(1)}px ${borderColor} inset`,
                       }}
                     >
                     <span
-                      className="rounded-full bg-red-500"
+                      className="rounded-full"
                       style={{
                         width: footerMetrics.dotSize,
                         height: footerMetrics.dotSize,
-                        boxShadow: `0 0 0 ${footerMetrics.dotShadow}px rgba(255,45,45,0.16)`,
+                        backgroundColor: liveColor,
+                        boxShadow: `0 0 0 ${footerMetrics.dotShadow}px ${liveGlow}`,
                       }}
                     />
                     {footerLink || "twitch.tv/yourname"}
@@ -1355,3 +2842,4 @@ export default function StorySchedulePreview({
     </div>
   );
 }
+

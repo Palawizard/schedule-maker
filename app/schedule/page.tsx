@@ -1,10 +1,22 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
-import { toPng } from "html-to-image";
-import StorySchedulePreview, { StoryDay } from "./StorySchedulePreview";
+import { getFontEmbedCSS, toBlob, toPng } from "html-to-image";
+import type { User } from "@supabase/supabase-js";
+import AuthStatus from "../components/AuthStatus";
+import { supabase } from "@/lib/supabase/client";
+import StorySchedulePreview, {
+  StoryDay,
+  type PreviewTheme,
+} from "./StorySchedulePreview";
+import {
+  type CustomExportSize,
+  type ScheduleFile,
+  initialDays,
+} from "./scheduleData";
 
 const weekDays = [
   "Monday",
@@ -16,14 +28,160 @@ const weekDays = [
   "Sunday",
 ];
 
-const exportSizes = [
+type ExportSizeOption = {
+  id: string;
+  label: string;
+  width: number;
+  height: number;
+};
+
+const exportSizes: ExportSizeOption[] = [
   { id: "story", label: "Story", width: 1080, height: 1920 },
   { id: "youtube", label: "YouTube post", width: 1280, height: 720 },
   { id: "x-vertical", label: "X vertical", width: 1080, height: 1920 },
   { id: "x-horizontal", label: "X horizontal", width: 1600, height: 900 },
 ];
 
-type FlagKey = "uk" | "us" | "eu" | "jp" | "au" | "globe";
+const isExportSizeId = (value: string) =>
+  exportSizes.some((size) => size.id === value) ||
+  value === "custom-vertical" ||
+  value === "custom-horizontal";
+
+const scheduleCookiePrefix = "pala-schedule-draft-v2";
+const scheduleCookieMaxAgeSeconds = 60 * 60 * 24 * 30;
+const getScheduleCookieName = (scheduleId: string) =>
+  `${scheduleCookiePrefix}-${scheduleId}`;
+
+const readCookie = (name: string) => {
+  if (typeof document === "undefined") return null;
+  const entry = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith(`${name}=`));
+  if (!entry) return null;
+  const value = entry.slice(name.length + 1);
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+};
+
+const writeCookie = (name: string, value: string, maxAgeSeconds: number) => {
+  if (typeof document === "undefined" || typeof window === "undefined") return;
+  const encoded = encodeURIComponent(value);
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${name}=${encoded}; Path=/; Max-Age=${maxAgeSeconds}; SameSite=Lax${secure}`;
+};
+
+const fontMimeTypes: Record<string, string> = {
+  woff2: "font/woff2",
+  woff: "font/woff",
+  ttf: "font/ttf",
+  otf: "font/otf",
+  eot: "application/vnd.ms-fontobject",
+};
+
+const blobToDataUrl = (blob: Blob) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error);
+    reader.onloadend = () => resolve(String(reader.result));
+    reader.readAsDataURL(blob);
+  });
+
+const inlineFontUrls = async (
+  cssText: string,
+  baseUrl: string | null,
+  cache: Map<string, string>,
+) => {
+  const urlRegex = /url\((['"]?)([^'")]+)\1\)/g;
+  const matches = Array.from(cssText.matchAll(urlRegex));
+  let result = cssText;
+
+  for (const match of matches) {
+    const original = match[0];
+    const url = match[2];
+    if (!url || url.startsWith("data:")) continue;
+    const absoluteUrl = (() => {
+      try {
+        return new URL(url, baseUrl ?? window.location.href).href;
+      } catch {
+        return url;
+      }
+    })();
+    let dataUrl = cache.get(absoluteUrl);
+    if (!dataUrl) {
+      try {
+        const response = await fetch(absoluteUrl);
+        if (!response.ok) continue;
+        const blob = await response.blob();
+        const ext = absoluteUrl.split(".").pop()?.toLowerCase() ?? "";
+        const mime = blob.type || fontMimeTypes[ext] || "application/octet-stream";
+        const typedBlob =
+          blob.type === mime ? blob : blob.slice(0, blob.size, mime);
+        dataUrl = await blobToDataUrl(typedBlob);
+        cache.set(absoluteUrl, dataUrl);
+      } catch {
+        continue;
+      }
+    }
+    result = result.replace(original, `url("${dataUrl}")`);
+  }
+
+  return result;
+};
+
+const buildFontEmbedCSS = async (root: HTMLElement) => {
+  try {
+    const css = await getFontEmbedCSS(root, {
+      cacheBust: true,
+      includeQueryParams: true,
+    });
+    if (css.trim()) return css;
+  } catch (error) {
+    console.warn("Failed to gather embedded fonts", error);
+  }
+
+  const fontFaceRules: Array<{ cssText: string; baseUrl: string | null }> = [];
+  for (const sheet of Array.from(document.styleSheets)) {
+    let rules: CSSRuleList | undefined;
+    try {
+      rules = sheet.cssRules;
+    } catch {
+      continue;
+    }
+    if (!rules) continue;
+    for (const rule of Array.from(rules)) {
+      if (rule.type === CSSRule.FONT_FACE_RULE) {
+        fontFaceRules.push({ cssText: rule.cssText, baseUrl: sheet.href });
+      }
+    }
+  }
+
+  if (fontFaceRules.length === 0) return "";
+  const cache = new Map<string, string>();
+  const inlined = await Promise.all(
+    fontFaceRules.map((rule) =>
+      inlineFontUrls(rule.cssText, rule.baseUrl, cache),
+    ),
+  );
+  return Array.from(new Set(inlined)).join("\n");
+};
+
+type FlagKey =
+  | "uk"
+  | "us"
+  | "eu"
+  | "jp"
+  | "au"
+  | "fr"
+  | "de"
+  | "es"
+  | "it"
+  | "br"
+  | "in"
+  | "kr"
+  | "globe";
 
 type TimeZoneOption = {
   id: string;
@@ -94,6 +252,55 @@ const slotZoneOptions: SlotZoneOption[] = [
     description: "Europe/Paris",
   },
   {
+    id: "fr",
+    label: "France",
+    timeZone: "Europe/Paris",
+    flag: "fr",
+    description: "Europe/Paris",
+  },
+  {
+    id: "de",
+    label: "Germany",
+    timeZone: "Europe/Berlin",
+    flag: "de",
+    description: "Europe/Berlin",
+  },
+  {
+    id: "es",
+    label: "Spain",
+    timeZone: "Europe/Madrid",
+    flag: "es",
+    description: "Europe/Madrid",
+  },
+  {
+    id: "it",
+    label: "Italy",
+    timeZone: "Europe/Rome",
+    flag: "it",
+    description: "Europe/Rome",
+  },
+  {
+    id: "br",
+    label: "Brazil",
+    timeZone: "America/Sao_Paulo",
+    flag: "br",
+    description: "America/Sao_Paulo",
+  },
+  {
+    id: "in",
+    label: "India",
+    timeZone: "Asia/Kolkata",
+    flag: "in",
+    description: "Asia/Kolkata",
+  },
+  {
+    id: "kr",
+    label: "Korea",
+    timeZone: "Asia/Seoul",
+    flag: "kr",
+    description: "Asia/Seoul",
+  },
+  {
     id: "utc",
     label: "UTC",
     timeZone: "UTC",
@@ -123,6 +330,305 @@ const slotZoneOptions: SlotZoneOption[] = [
   },
 ];
 
+type ThemeBackgroundOption = {
+  id: string;
+  label: string;
+  description: string;
+  background: string;
+  thumbOverlay: string;
+};
+
+
+type ThemeFontOption = {
+  id: string;
+  label: string;
+  description: string;
+  body: string;
+  heading: string;
+};
+
+type ThemeCardStyleOption = {
+  id: string;
+  label: string;
+  description: string;
+  surface: string;
+  surfaceStrong: string;
+};
+
+type ThemeBorderOption = {
+  id: string;
+  label: string;
+  description: string;
+  frameRadius: number;
+  cardRadius: number;
+};
+
+type ThemeBorderWeightOption = {
+  id: string;
+  label: string;
+  description: string;
+  frameBorderWidth: number;
+  cardBorderWidth: number;
+};
+
+const themeBackgrounds: ThemeBackgroundOption[] = [
+  {
+    id: "nebula",
+    label: "Nebula",
+    description: "Violet and cyan haze",
+    background:
+      "radial-gradient(820px 560px at 22% 14%, rgba(124,58,237,0.28), transparent 64%)," +
+      "radial-gradient(820px 600px at 84% 22%, rgba(34,211,238,0.16), transparent 66%)," +
+      "linear-gradient(180deg, rgb(9,7,24), rgb(11,7,34))",
+    thumbOverlay:
+      "linear-gradient(135deg, rgba(124,58,237,0.2), rgba(34,211,238,0.14))",
+  },
+  {
+    id: "sunset",
+    label: "Sunset",
+    description: "Warm orange glow",
+    background:
+      "radial-gradient(820px 560px at 20% 16%, rgba(251,146,60,0.28), transparent 64%)," +
+      "radial-gradient(760px 560px at 82% 20%, rgba(244,63,94,0.22), transparent 60%)," +
+      "linear-gradient(180deg, rgb(20,7,16), rgb(34,10,22))",
+    thumbOverlay:
+      "linear-gradient(135deg, rgba(251,146,60,0.2), rgba(244,63,94,0.16))",
+  },
+  {
+    id: "coast",
+    label: "Coast",
+    description: "Cool teal drift",
+    background:
+      "radial-gradient(820px 560px at 20% 16%, rgba(14,165,233,0.26), transparent 64%)," +
+      "radial-gradient(760px 560px at 82% 22%, rgba(45,212,191,0.2), transparent 60%)," +
+      "linear-gradient(180deg, rgb(7,12,24), rgb(9,20,32))",
+    thumbOverlay:
+      "linear-gradient(135deg, rgba(14,165,233,0.2), rgba(45,212,191,0.14))",
+  },
+  {
+    id: "graphite",
+    label: "Graphite",
+    description: "Minimal charcoal",
+    background:
+      "radial-gradient(760px 500px at 18% 18%, rgba(148,163,184,0.2), transparent 60%)," +
+      "radial-gradient(760px 520px at 82% 26%, rgba(71,85,105,0.24), transparent 60%)," +
+      "linear-gradient(180deg, rgb(10,12,16), rgb(20,24,30))",
+    thumbOverlay:
+      "linear-gradient(135deg, rgba(148,163,184,0.18), rgba(71,85,105,0.12))",
+  },
+  {
+    id: "garden",
+    label: "Garden",
+    description: "Fresh green glow",
+    background:
+      "radial-gradient(820px 560px at 20% 16%, rgba(34,197,94,0.24), transparent 64%)," +
+      "radial-gradient(760px 560px at 82% 24%, rgba(132,204,22,0.2), transparent 60%)," +
+      "linear-gradient(180deg, rgb(8,16,12), rgb(12,24,16))",
+    thumbOverlay:
+      "linear-gradient(135deg, rgba(34,197,94,0.2), rgba(132,204,22,0.14))",
+  },
+];
+
+const basePalette = {
+  accent: "#38bdf8",
+  accentSoft: "rgba(56,189,248,0.2)",
+  accentGlow: "rgba(56,189,248,0.55)",
+  border: "rgba(255,255,255,0.22)",
+  live: "#f87171",
+  liveGlow: "rgba(248,113,113,0.2)",
+};
+
+const themeFonts: ThemeFontOption[] = [
+  {
+    id: "grotesk-fraunces",
+    label: "Grotesk / Fraunces",
+    description: "Clean body, serif accents",
+    body: 'var(--font-space-grotesk), "Segoe UI", sans-serif',
+    heading: 'var(--font-fraunces), var(--font-space-grotesk), serif',
+  },
+  {
+    id: "fraunces-grotesk",
+    label: "Fraunces / Grotesk",
+    description: "Serif body, clean accents",
+    body: 'var(--font-fraunces), var(--font-space-grotesk), serif',
+    heading: 'var(--font-space-grotesk), "Segoe UI", sans-serif',
+  },
+  {
+    id: "grotesk-only",
+    label: "Grotesk only",
+    description: "Mono sans look",
+    body: 'var(--font-space-grotesk), "Segoe UI", sans-serif',
+    heading: 'var(--font-space-grotesk), "Segoe UI", sans-serif',
+  },
+  {
+    id: "fraunces-only",
+    label: "Fraunces only",
+    description: "Bold editorial",
+    body: 'var(--font-fraunces), var(--font-space-grotesk), serif',
+    heading: 'var(--font-fraunces), var(--font-space-grotesk), serif',
+  },
+  {
+    id: "sora-playfair",
+    label: "Sora / Playfair",
+    description: "Geometric body, classic display",
+    body: 'var(--font-sora), "Segoe UI", sans-serif',
+    heading: 'var(--font-playfair-display), var(--font-fraunces), serif',
+  },
+  {
+    id: "playfair-sora",
+    label: "Playfair / Sora",
+    description: "Editorial body, crisp sans",
+    body: 'var(--font-playfair-display), var(--font-fraunces), serif',
+    heading: 'var(--font-sora), var(--font-space-grotesk), sans-serif',
+  },
+  {
+    id: "manrope-fraunces",
+    label: "Manrope / Fraunces",
+    description: "Friendly sans, elegant serif",
+    body: 'var(--font-manrope), "Segoe UI", sans-serif',
+    heading: 'var(--font-fraunces), var(--font-playfair-display), serif',
+  },
+  {
+    id: "manrope-only",
+    label: "Manrope only",
+    description: "Modern sans focus",
+    body: 'var(--font-manrope), "Segoe UI", sans-serif',
+    heading: 'var(--font-manrope), "Segoe UI", sans-serif',
+  },
+  {
+    id: "sora-only",
+    label: "Sora only",
+    description: "Crisp geometric sans",
+    body: 'var(--font-sora), "Segoe UI", sans-serif',
+    heading: 'var(--font-sora), "Segoe UI", sans-serif',
+  },
+];
+
+const themeCardStyles: ThemeCardStyleOption[] = [
+  {
+    id: "glass",
+    label: "Glass",
+    description: "Airy and translucent",
+    surface: "rgba(255,255,255,0.08)",
+    surfaceStrong: "rgba(255,255,255,0.16)",
+  },
+  {
+    id: "mist",
+    label: "Mist",
+    description: "Smoky contrast",
+    surface: "rgba(15,23,42,0.35)",
+    surfaceStrong: "rgba(15,23,42,0.55)",
+  },
+  {
+    id: "crisp",
+    label: "Crisp",
+    description: "Bright edges",
+    surface: "rgba(255,255,255,0.12)",
+    surfaceStrong: "rgba(255,255,255,0.22)",
+  },
+];
+
+const themeBorders: ThemeBorderOption[] = [
+  {
+    id: "soft",
+    label: "Soft",
+    description: "Rounded corners",
+    frameRadius: 38,
+    cardRadius: 28,
+  },
+  {
+    id: "sharp",
+    label: "Sharp",
+    description: "Tighter cuts",
+    frameRadius: 22,
+    cardRadius: 16,
+  },
+  {
+    id: "pill",
+    label: "Pill",
+    description: "Extra round",
+    frameRadius: 58,
+    cardRadius: 40,
+  },
+];
+
+const themeBorderWeights: ThemeBorderWeightOption[] = [
+  {
+    id: "hairline",
+    label: "Hairline",
+    description: "1px strokes",
+    frameBorderWidth: 1,
+    cardBorderWidth: 1,
+  },
+  {
+    id: "medium",
+    label: "Medium",
+    description: "2px strokes",
+    frameBorderWidth: 2,
+    cardBorderWidth: 2,
+  },
+  {
+    id: "bold",
+    label: "Bold",
+    description: "3px strokes",
+    frameBorderWidth: 3,
+    cardBorderWidth: 3,
+  },
+];
+
+const flagKeys: FlagKey[] = [
+  "uk",
+  "us",
+  "eu",
+  "jp",
+  "au",
+  "fr",
+  "de",
+  "es",
+  "it",
+  "br",
+  "in",
+  "kr",
+  "globe",
+];
+
+const flagKeySet = new Set(flagKeys);
+
+const isFlagKey = (value: unknown): value is FlagKey =>
+  typeof value === "string" && flagKeySet.has(value as FlagKey);
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const getString = (value: unknown, fallback = "") =>
+  typeof value === "string" ? value : fallback;
+
+const getBoolean = (value: unknown, fallback = false) =>
+  typeof value === "boolean" ? value : fallback;
+
+const getPositiveNumber = (value: unknown, fallback: number) => {
+  const numeric =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number.parseInt(value, 10)
+        : Number.NaN;
+  if (!Number.isFinite(numeric) || numeric <= 0) return fallback;
+  return Math.round(numeric);
+};
+
+const getArray = <T,>(value: unknown): T[] =>
+  Array.isArray(value) ? (value as T[]) : [];
+
+const getMaxIdValue = (id: string) => {
+  const matches = id.match(/\d+/g);
+  if (!matches) return null;
+  return matches.reduce((max, match) => {
+    const value = Number.parseInt(match, 10);
+    if (Number.isNaN(value)) return max;
+    return Math.max(max, value);
+  }, -1);
+};
 
 const parseTimeValue = (value: string) => {
   const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
@@ -261,6 +767,76 @@ function FlagIcon({ flag }: { flag: FlagKey }) {
       </svg>
     );
   }
+  if (flag === "fr") {
+    return (
+      <svg viewBox="0 0 60 42" xmlns="http://www.w3.org/2000/svg">
+        <rect width="20" height="42" fill="#0055A4" />
+        <rect x="20" width="20" height="42" fill="#FFF" />
+        <rect x="40" width="20" height="42" fill="#EF4135" />
+      </svg>
+    );
+  }
+  if (flag === "de") {
+    return (
+      <svg viewBox="0 0 60 42" xmlns="http://www.w3.org/2000/svg">
+        <rect width="60" height="14" fill="#000" />
+        <rect y="14" width="60" height="14" fill="#DD0000" />
+        <rect y="28" width="60" height="14" fill="#FFCE00" />
+      </svg>
+    );
+  }
+  if (flag === "es") {
+    return (
+      <svg viewBox="0 0 60 42" xmlns="http://www.w3.org/2000/svg">
+        <rect width="60" height="10" fill="#AA151B" />
+        <rect y="10" width="60" height="22" fill="#F1BF00" />
+        <rect y="32" width="60" height="10" fill="#AA151B" />
+      </svg>
+    );
+  }
+  if (flag === "it") {
+    return (
+      <svg viewBox="0 0 60 42" xmlns="http://www.w3.org/2000/svg">
+        <rect width="20" height="42" fill="#009246" />
+        <rect x="20" width="20" height="42" fill="#FFF" />
+        <rect x="40" width="20" height="42" fill="#CE2B37" />
+      </svg>
+    );
+  }
+  if (flag === "br") {
+    return (
+      <svg viewBox="0 0 60 42" xmlns="http://www.w3.org/2000/svg">
+        <rect width="60" height="42" fill="#009C3B" />
+        <polygon points="30,6 54,21 30,36 6,21" fill="#FFDF00" />
+        <circle cx="30" cy="21" r="8" fill="#002776" />
+      </svg>
+    );
+  }
+  if (flag === "in") {
+    return (
+      <svg viewBox="0 0 60 42" xmlns="http://www.w3.org/2000/svg">
+        <rect width="60" height="14" fill="#FF9933" />
+        <rect y="14" width="60" height="14" fill="#FFF" />
+        <rect y="28" width="60" height="14" fill="#138808" />
+        <circle cx="30" cy="21" r="4" fill="#000080" />
+      </svg>
+    );
+  }
+  if (flag === "kr") {
+    return (
+      <svg viewBox="0 0 60 42" xmlns="http://www.w3.org/2000/svg">
+        <rect width="60" height="42" fill="#FFF" />
+        <path
+          d="M30 11 A10 10 0 0 1 40 21 A10 10 0 0 1 20 21 A10 10 0 0 1 30 11 Z"
+          fill="#CD2E3A"
+        />
+        <path
+          d="M30 31 A10 10 0 0 1 20 21 A10 10 0 0 1 40 21 A10 10 0 0 1 30 31 Z"
+          fill="#0047A0"
+        />
+      </svg>
+    );
+  }
   return (
     <svg viewBox="0 0 60 42" xmlns="http://www.w3.org/2000/svg">
       <rect width="60" height="42" fill="#0f172a" />
@@ -272,138 +848,8 @@ function FlagIcon({ flag }: { flag: FlagKey }) {
   );
 }
 
-const initialDays: StoryDay[] = [
-  {
-    id: "day-1",
-    day: "Tuesday",
-    date: "Jan 12",
-    title: "Test Stream then VRChat pics!",
-    thumbUrl:
-      "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/438100/capsule_616x353.jpg?t=1762366454",
-    off: false,
-    baseTime: "20:30",
-    times: [
-      {
-        id: "slot-1",
-        zoneId: "uk",
-        label: "",
-        time: "",
-        flag: "uk",
-        customLabel: "",
-        customTime: "",
-        customZone: "",
-        customEmoji: "",
-        customFlag: "globe",
-      },
-      {
-        id: "slot-2",
-        zoneId: "us-et",
-        label: "",
-        time: "",
-        flag: "us",
-        customLabel: "",
-        customTime: "",
-        customZone: "",
-        customEmoji: "",
-        customFlag: "globe",
-      },
-    ],
-  },
-  {
-    id: "day-2",
-    day: "Wednesday",
-    date: "",
-    title: "",
-    thumbUrl: "",
-    off: true,
-    baseTime: "20:30",
-    times: [],
-  },
-  {
-    id: "day-3",
-    day: "Thursday",
-    date: "Jan 14",
-    title: "Valorant ranked!",
-    thumbUrl:
-      "https://image.jeuxvideo.com/medias-sm/158341/1583411902-8477-jaquette-avant.jpg",
-    off: false,
-    baseTime: "20:30",
-    times: [
-      {
-        id: "slot-3",
-        zoneId: "uk",
-        label: "",
-        time: "",
-        flag: "uk",
-        customLabel: "",
-        customTime: "",
-        customZone: "",
-        customEmoji: "",
-        customFlag: "globe",
-      },
-      {
-        id: "slot-4",
-        zoneId: "us-et",
-        label: "",
-        time: "",
-        flag: "us",
-        customLabel: "",
-        customTime: "",
-        customZone: "",
-        customEmoji: "",
-        customFlag: "globe",
-      },
-    ],
-  },
-  {
-    id: "day-4",
-    day: "Friday",
-    date: "",
-    title: "",
-    thumbUrl: "",
-    off: true,
-    baseTime: "20:30",
-    times: [],
-  },
-  {
-    id: "day-5",
-    day: "Saturday",
-    date: "Jan 16",
-    title: "Starting an hardcore world!",
-    thumbUrl:
-      "https://www.nintendo.com/eu/media/images/10_share_images/games_15/nintendo_switch_4/2x1_NSwitch_Minecraft.jpg",
-    off: false,
-    baseTime: "20:30",
-    times: [
-      {
-        id: "slot-5",
-        zoneId: "uk",
-        label: "",
-        time: "",
-        flag: "uk",
-        customLabel: "",
-        customTime: "",
-        customZone: "",
-        customEmoji: "",
-        customFlag: "globe",
-      },
-      {
-        id: "slot-6",
-        zoneId: "us-et",
-        label: "",
-        time: "",
-        flag: "us",
-        customLabel: "",
-        customTime: "",
-        customZone: "",
-        customEmoji: "",
-        customFlag: "globe",
-      },
-    ],
-  },
-];
-
-type TimeSlot = StoryDay["times"][number];
+type Stream = StoryDay["streams"][number];
+type TimeSlot = Stream["times"][number];
 
 type SelectedElement =
   | { type: "day"; id: string }
@@ -412,8 +858,14 @@ type SelectedElement =
   | null;
 
 export default function SchedulePage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const scheduleId = useMemo(() => searchParams.get("id"), [searchParams]);
   const idRef = useRef(100);
   const previewRef = useRef<HTMLDivElement>(null);
+  const scheduleFileInputRef = useRef<HTMLInputElement>(null);
+  const lastPersistedRef = useRef<string | null>(null);
+  const persistTimeoutRef = useRef<number | null>(null);
   const [scheduleName, setScheduleName] = useState("Week 24");
   const [timeZoneOptions, setTimeZoneOptions] =
     useState<TimeZoneOption[]>(defaultTimeZones);
@@ -423,6 +875,9 @@ export default function SchedulePage() {
   const [days, setDays] = useState<StoryDay[]>(initialDays);
   const [selectedDayId, setSelectedDayId] = useState<string | null>(
     initialDays[0]?.id ?? null,
+  );
+  const [selectedStreamId, setSelectedStreamId] = useState<string | null>(
+    initialDays[0]?.streams[0]?.id ?? null,
   );
   const [selectedElement, setSelectedElement] = useState<SelectedElement>(
     initialDays[0]?.id ? { type: "day", id: initialDays[0].id } : null,
@@ -442,36 +897,194 @@ export default function SchedulePage() {
   const [exportSizeId, setExportSizeId] = useState(
     exportSizes[0]?.id ?? "story",
   );
+  const [customVerticalSize, setCustomVerticalSize] =
+    useState<CustomExportSize>({
+      width: 1080,
+      height: 1920,
+    });
+  const [customHorizontalSize, setCustomHorizontalSize] =
+    useState<CustomExportSize>({
+      width: 1920,
+      height: 1080,
+    });
+  const [themeBackgroundId, setThemeBackgroundId] = useState(
+    themeBackgrounds[0]?.id ?? "nebula",
+  );
+  const [themeFontId, setThemeFontId] = useState(
+    themeFonts[0]?.id ?? "grotesk-fraunces",
+  );
+  const [themeCardStyleId, setThemeCardStyleId] = useState(
+    themeCardStyles[0]?.id ?? "glass",
+  );
+  const [themeBorderId, setThemeBorderId] = useState(
+    themeBorders[0]?.id ?? "soft",
+  );
+  const [themeBorderWeightId, setThemeBorderWeightId] = useState(
+    themeBorderWeights[0]?.id ?? "hairline",
+  );
   const [activeEmojiPickerId, setActiveEmojiPickerId] = useState<string | null>(
     null,
   );
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isCopying, setIsCopying] = useState(false);
   const [exportRequested, setExportRequested] = useState(false);
+  const [copyRequested, setCopyRequested] = useState(false);
   const [isExportingView, setIsExportingView] = useState(false);
+  const [canCopyToClipboard, setCanCopyToClipboard] = useState(false);
+  const [authUser, setAuthUser] = useState<User | null>(null);
+  const [scheduleRecordId, setScheduleRecordId] = useState<string | null>(null);
+  const [scheduleLoadError, setScheduleLoadError] = useState<string | null>(
+    null,
+  );
+  const [isScheduleReady, setIsScheduleReady] = useState(false);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [shareStatus, setShareStatus] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
+  const [shareLink, setShareLink] = useState("");
+  const [shareError, setShareError] = useState<string | null>(null);
   const [pendingDeleteDayId, setPendingDeleteDayId] = useState<string | null>(
     null,
   );
+  const [pendingDeleteStream, setPendingDeleteStream] = useState<{
+    dayId: string;
+    streamId: string;
+  } | null>(null);
+  const [pendingClearAll, setPendingClearAll] = useState(false);
   const [localThumbNames, setLocalThumbNames] = useState<Record<string, string>>(
     {},
   );
+  const [scheduleFileError, setScheduleFileError] = useState<string | null>(null);
   const objectUrlsRef = useRef<Record<string, string>>({});
 
   const selectedDay = useMemo(
     () => days.find((day) => day.id === selectedDayId) ?? null,
     [days, selectedDayId],
   );
+  const selectedStream = useMemo(() => {
+    if (!selectedDay) return null;
+    if (!selectedStreamId) return selectedDay.streams[0] ?? null;
+    return (
+      selectedDay.streams.find((stream) => stream.id === selectedStreamId) ??
+      selectedDay.streams[0] ??
+      null
+    );
+  }, [selectedDay, selectedStreamId]);
   const pendingDeleteDay = useMemo(
     () => days.find((day) => day.id === pendingDeleteDayId) ?? null,
     [days, pendingDeleteDayId],
   );
+  const pendingDeleteStreamInfo = useMemo(() => {
+    if (!pendingDeleteStream) return null;
+    const day = days.find((entry) => entry.id === pendingDeleteStream.dayId);
+    if (!day) return null;
+    const stream = day.streams.find(
+      (entry) => entry.id === pendingDeleteStream.streamId,
+    );
+    if (!stream) return null;
+    return { day, stream };
+  }, [days, pendingDeleteStream]);
+  const syncCustomVerticalSize = (next: CustomExportSize) => {
+    setCustomVerticalSize((prev) => ({
+      width: getPositiveNumber(next.width, prev.width),
+      height: getPositiveNumber(next.height, prev.height),
+    }));
+  };
+  const syncCustomHorizontalSize = (next: CustomExportSize) => {
+    setCustomHorizontalSize((prev) => ({
+      width: getPositiveNumber(next.width, prev.width),
+      height: getPositiveNumber(next.height, prev.height),
+    }));
+  };
+  const exportSizeOptions = useMemo(
+    () => [
+      ...exportSizes,
+      {
+        id: "custom-vertical",
+        label: "Custom vertical (portrait)",
+        width: customVerticalSize.width,
+        height: customVerticalSize.height,
+      },
+      {
+        id: "custom-horizontal",
+        label: "Custom horizontal (landscape)",
+        width: customHorizontalSize.width,
+        height: customHorizontalSize.height,
+      },
+    ],
+    [customHorizontalSize, customVerticalSize],
+  );
   const selectedExport = useMemo(
     () =>
-      exportSizes.find((size) => size.id === exportSizeId) ?? exportSizes[0],
-    [exportSizeId],
+      exportSizeOptions.find((size) => size.id === exportSizeId) ??
+      exportSizeOptions[0],
+    [exportSizeId, exportSizeOptions],
+  );
+  const selectedThemeBackground = useMemo(
+    () =>
+      themeBackgrounds.find((option) => option.id === themeBackgroundId) ??
+      themeBackgrounds[0],
+    [themeBackgroundId],
+  );
+  const selectedThemeFont = useMemo(
+    () =>
+      themeFonts.find((option) => option.id === themeFontId) ??
+      themeFonts[0],
+    [themeFontId],
+  );
+  const selectedThemeCardStyle = useMemo(
+    () =>
+      themeCardStyles.find((option) => option.id === themeCardStyleId) ??
+      themeCardStyles[0],
+    [themeCardStyleId],
+  );
+  const selectedThemeBorder = useMemo(
+    () =>
+      themeBorders.find((option) => option.id === themeBorderId) ??
+      themeBorders[0],
+    [themeBorderId],
+  );
+  const selectedThemeBorderWeight = useMemo(
+    () =>
+      themeBorderWeights.find((option) => option.id === themeBorderWeightId) ??
+      themeBorderWeights[0],
+    [themeBorderWeightId],
   );
   const exportWidth = selectedExport?.width ?? 1080;
   const exportHeight = selectedExport?.height ?? 1920;
+  const layoutMode = useMemo<"portrait" | "landscape">(() => {
+    if (exportSizeId === "custom-vertical") return "portrait";
+    if (exportSizeId === "custom-horizontal") return "landscape";
+    return exportWidth > exportHeight ? "landscape" : "portrait";
+  }, [exportHeight, exportSizeId, exportWidth]);
+  const previewTheme = useMemo<PreviewTheme>(
+    () => ({
+      background: selectedThemeBackground.background,
+      thumbOverlay: selectedThemeBackground.thumbOverlay,
+      accent: basePalette.accent,
+      accentSoft: basePalette.accentSoft,
+      accentGlow: basePalette.accentGlow,
+      borderColor: basePalette.border,
+      cardSurface: selectedThemeCardStyle.surface,
+      cardSurfaceStrong: selectedThemeCardStyle.surfaceStrong,
+      frameRadius: selectedThemeBorder.frameRadius,
+      cardRadius: selectedThemeBorder.cardRadius,
+      frameBorderWidth: selectedThemeBorderWeight.frameBorderWidth,
+      cardBorderWidth: selectedThemeBorderWeight.cardBorderWidth,
+      bodyFont: selectedThemeFont.body,
+      headingFont: selectedThemeFont.heading,
+      liveColor: basePalette.live,
+      liveGlow: basePalette.liveGlow,
+    }),
+    [
+      selectedThemeBackground,
+      selectedThemeCardStyle,
+      selectedThemeBorder,
+      selectedThemeBorderWeight,
+      selectedThemeFont,
+    ],
+  );
   const slotZoneMap = useMemo(
     () => new Map(slotZoneOptions.map((option) => [option.id, option])),
     [],
@@ -482,6 +1095,106 @@ export default function SchedulePage() {
       scheduleTimeZone,
     [scheduleTimeZone, timeZoneOptions],
   );
+  useEffect(() => {
+    let active = true;
+    setScheduleLoadError(null);
+
+    const loadFromCookie = () => {
+      if (!scheduleId) return null;
+      const stored = readCookie(getScheduleCookieName(scheduleId));
+      if (!stored) return null;
+      try {
+        const parsed = JSON.parse(stored) as unknown;
+        return normalizeScheduleFile(parsed);
+      } catch (error) {
+        console.warn("Failed to parse schedule cookie", error);
+        return null;
+      }
+    };
+
+    const loadFromAccount = async (user: User, id: string) => {
+      const { data, error } = await supabase
+        .from("schedules")
+        .select("id, payload")
+        .eq("id", id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (error || !data?.payload) return null;
+      if (active) {
+        setScheduleRecordId(data.id);
+      }
+      return normalizeScheduleFile(data.payload);
+    };
+
+    const init = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!active) return;
+      const nextUser = data.session?.user ?? null;
+      setAuthUser(nextUser);
+      if (!nextUser) {
+        if (active) {
+          setIsScheduleReady(true);
+        }
+        return;
+      }
+      if (!scheduleId) {
+        if (active) {
+          setIsScheduleReady(true);
+        }
+        return;
+      }
+
+      let payload: ScheduleFile | null = null;
+      payload = await loadFromAccount(nextUser, scheduleId);
+      if (!payload) {
+        payload = loadFromCookie();
+      }
+      if (payload && active) {
+        applyLoadedSchedule(payload);
+      } else if (active) {
+        setScheduleLoadError("Schedule not found.");
+      }
+      if (active) {
+        setIsScheduleReady(true);
+      }
+    };
+
+    void init();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (!active) return;
+        setAuthUser(session?.user ?? null);
+      },
+    );
+
+    return () => {
+      active = false;
+      authListener?.subscription.unsubscribe();
+    };
+  }, [scheduleId]);
+  useEffect(() => {
+    lastPersistedRef.current = null;
+    setScheduleRecordId(null);
+  }, [scheduleId]);
+  useEffect(() => {
+    if (!isScheduleReady || !authUser) return;
+    if (!scheduleId) {
+      router.replace("/schedules");
+    }
+  }, [authUser, isScheduleReady, scheduleId, router]);
+  useEffect(() => {
+    if (typeof navigator === "undefined" || typeof window === "undefined") {
+      setCanCopyToClipboard(false);
+      return;
+    }
+    setCanCopyToClipboard(
+      Boolean(
+        navigator.clipboard &&
+          typeof (window as typeof window).ClipboardItem !== "undefined",
+      ),
+    );
+  }, []);
   const getSlotDisplay = useMemo(
     () =>
       (slot: TimeSlot, baseTime: string) => {
@@ -516,23 +1229,136 @@ export default function SchedulePage() {
     () =>
       days.map((day) => ({
         ...day,
-        thumbUrl: resolveThumbUrl(day.thumbUrl),
-        times: day.times.map((slot) => {
-          const display = getSlotDisplay(slot, day.baseTime);
-          return {
-            ...slot,
-            label: display.label,
-            time: display.time,
-            flag: display.flag,
-          };
-        }),
+        streams: day.streams.map((stream) => ({
+          ...stream,
+          thumbUrl: resolveThumbUrl(stream.thumbUrl),
+          times: stream.times.map((slot) => {
+            const display = getSlotDisplay(slot, stream.baseTime);
+            return {
+              ...slot,
+              label: display.label,
+              time: display.time,
+              flag: display.flag,
+            };
+          }),
+        })),
       })),
     [days, getSlotDisplay],
   );
+  const schedulePayload = useMemo<ScheduleFile>(
+    () => ({
+      version: 2,
+      scheduleName,
+      scheduleTimeZone,
+      exportSizeId,
+      customVerticalSize,
+      customHorizontalSize,
+      showHeader,
+      headerTitle,
+      headerAlignment,
+      headerTone,
+      showFooter,
+      footerLink,
+      footerStyle,
+      footerSize,
+      theme: {
+        backgroundId: themeBackgroundId,
+        fontId: themeFontId,
+        cardStyleId: themeCardStyleId,
+        borderId: themeBorderId,
+        borderWeightId: themeBorderWeightId,
+      },
+      days,
+    }),
+    [
+      scheduleName,
+      scheduleTimeZone,
+      exportSizeId,
+      customVerticalSize,
+      customHorizontalSize,
+      showHeader,
+      headerTitle,
+      headerAlignment,
+      headerTone,
+      showFooter,
+      footerLink,
+      footerStyle,
+      footerSize,
+      themeBackgroundId,
+      themeFontId,
+      themeCardStyleId,
+      themeBorderId,
+      themeBorderWeightId,
+      days,
+    ],
+  );
+  const schedulePayloadJson = useMemo(
+    () => JSON.stringify(schedulePayload),
+    [schedulePayload],
+  );
 
-  const selectDay = (id: string) => {
+  useEffect(() => {
+    if (!isScheduleReady || !scheduleId) return;
+    if (schedulePayloadJson === lastPersistedRef.current) return;
+
+    if (persistTimeoutRef.current) {
+      window.clearTimeout(persistTimeoutRef.current);
+    }
+
+    persistTimeoutRef.current = window.setTimeout(() => {
+      lastPersistedRef.current = schedulePayloadJson;
+
+      writeCookie(
+        getScheduleCookieName(scheduleId),
+        schedulePayloadJson,
+        scheduleCookieMaxAgeSeconds,
+      );
+
+      if (authUser) {
+        void supabase
+          .from("schedules")
+          .upsert(
+            {
+              id: scheduleRecordId ?? scheduleId,
+              user_id: authUser.id,
+              name: schedulePayload.scheduleName,
+              payload: schedulePayload,
+            },
+            { onConflict: "id" },
+          )
+          .then(({ error }) => {
+            if (error) {
+              console.error("Failed to persist schedule", error);
+            }
+          });
+      }
+    }, 700);
+
+    return () => {
+      if (persistTimeoutRef.current) {
+        window.clearTimeout(persistTimeoutRef.current);
+      }
+    };
+  }, [
+    authUser,
+    isScheduleReady,
+    scheduleId,
+    scheduleRecordId,
+    schedulePayload,
+    schedulePayloadJson,
+  ]);
+
+  const selectDay = (id: string, streamId?: string) => {
     setSelectedDayId(id);
     setSelectedElement({ type: "day", id });
+    const day = days.find((entry) => entry.id === id);
+    const hasSelectedStream =
+      selectedStreamId &&
+      day?.streams.some((stream) => stream.id === selectedStreamId);
+    const nextStreamId =
+      streamId ??
+      (hasSelectedStream ? selectedStreamId : day?.streams[0]?.id ?? null);
+    setSelectedStreamId(nextStreamId);
   };
 
   const selectHeader = () => {
@@ -621,6 +1447,14 @@ export default function SchedulePage() {
 
   const canAddDay = days.length < 7;
 
+  const ensureTimeZoneOption = (zone: string) => {
+    if (!zone) return;
+    setTimeZoneOptions((prev) => {
+      if (prev.some((option) => option.id === zone)) return prev;
+      return [{ id: zone, label: zone }, ...prev];
+    });
+  };
+
   const getNextDayName = (currentDays: StoryDay[]) => {
     const used = new Set(currentDays.map((day) => day.day.toLowerCase()));
     return (
@@ -642,15 +1476,20 @@ export default function SchedulePage() {
     customFlag: "globe",
   });
 
+  const createStream = (): Stream => ({
+    id: `stream-${idRef.current++}`,
+    title: "New stream",
+    thumbUrl: "",
+    baseTime: "20:30",
+    times: [createTimeSlot()],
+  });
+
   const createDay = (dayName: string): StoryDay => ({
     id: `day-${idRef.current++}`,
     day: dayName,
     date: "",
-    title: "New stream",
-    thumbUrl: "",
     off: false,
-    baseTime: "20:30",
-    times: [createTimeSlot()],
+    streams: [createStream()],
   });
 
   const addDay = (position: "top" | "bottom") => {
@@ -660,7 +1499,51 @@ export default function SchedulePage() {
     setDays((prev) =>
       position === "top" ? [newDay, ...prev] : [...prev, newDay],
     );
-    selectDay(newDay.id);
+    selectDay(newDay.id, newDay.streams[0]?.id ?? null);
+  };
+
+  const reorderDays = (
+    dragId: string,
+    targetId: string,
+    position: "before" | "after",
+  ) => {
+    if (dragId === targetId) return;
+    setDays((prev) => {
+      const dragged = prev.find((day) => day.id === dragId);
+      if (!dragged) return prev;
+      const remaining = prev.filter((day) => day.id !== dragId);
+      const targetIndex = remaining.findIndex((day) => day.id === targetId);
+      if (targetIndex === -1) return prev;
+      const insertIndex = position === "after" ? targetIndex + 1 : targetIndex;
+      const next = [...remaining];
+      next.splice(insertIndex, 0, dragged);
+      return next;
+    });
+  };
+
+  const reorderStreams = (
+    dayId: string,
+    dragId: string,
+    targetId: string,
+    position: "before" | "after",
+  ) => {
+    if (dragId === targetId) return;
+    setDays((prev) =>
+      prev.map((day) => {
+        if (day.id !== dayId) return day;
+        const dragged = day.streams.find((stream) => stream.id === dragId);
+        if (!dragged) return day;
+        const remaining = day.streams.filter((stream) => stream.id !== dragId);
+        const targetIndex = remaining.findIndex(
+          (stream) => stream.id === targetId,
+        );
+        if (targetIndex === -1) return day;
+        const insertIndex = position === "after" ? targetIndex + 1 : targetIndex;
+        const nextStreams = [...remaining];
+        nextStreams.splice(insertIndex, 0, dragged);
+        return { ...day, streams: nextStreams };
+      }),
+    );
   };
 
   const updateDay = (id: string, patch: Partial<StoryDay>) => {
@@ -669,47 +1552,74 @@ export default function SchedulePage() {
     );
   };
 
-  const updateThumbnailUrl = (dayId: string, value: string) => {
-    const existingUrl = objectUrlsRef.current[dayId];
+  const updateStream = (
+    dayId: string,
+    streamId: string,
+    patch: Partial<Stream>,
+  ) => {
+    setDays((prev) =>
+      prev.map((day) => {
+        if (day.id !== dayId) return day;
+        return {
+          ...day,
+          streams: day.streams.map((stream) =>
+            stream.id === streamId ? { ...stream, ...patch } : stream,
+          ),
+        };
+      }),
+    );
+  };
+
+  const updateThumbnailUrl = (dayId: string, streamId: string, value: string) => {
+    const existingUrl = objectUrlsRef.current[streamId];
     if (existingUrl) {
       URL.revokeObjectURL(existingUrl);
-      delete objectUrlsRef.current[dayId];
+      delete objectUrlsRef.current[streamId];
       setLocalThumbNames((prev) => {
         const next = { ...prev };
-        delete next[dayId];
+        delete next[streamId];
         return next;
       });
     }
-    updateDay(dayId, { thumbUrl: value });
+    updateStream(dayId, streamId, { thumbUrl: value });
   };
 
-  const handleThumbnailUpload = (dayId: string, file: File) => {
+  const handleThumbnailUpload = (dayId: string, streamId: string, file: File) => {
     const nextUrl = URL.createObjectURL(file);
-    const existingUrl = objectUrlsRef.current[dayId];
+    const existingUrl = objectUrlsRef.current[streamId];
     if (existingUrl) {
       URL.revokeObjectURL(existingUrl);
     }
-    objectUrlsRef.current[dayId] = nextUrl;
-    setLocalThumbNames((prev) => ({ ...prev, [dayId]: file.name }));
-    updateDay(dayId, { thumbUrl: nextUrl });
+    objectUrlsRef.current[streamId] = nextUrl;
+    setLocalThumbNames((prev) => ({ ...prev, [streamId]: file.name }));
+    updateStream(dayId, streamId, { thumbUrl: nextUrl });
   };
 
-  const clearThumbnail = (dayId: string) => {
-    const existingUrl = objectUrlsRef.current[dayId];
+  const clearThumbnail = (dayId: string, streamId: string) => {
+    const existingUrl = objectUrlsRef.current[streamId];
     if (existingUrl) {
       URL.revokeObjectURL(existingUrl);
-      delete objectUrlsRef.current[dayId];
+      delete objectUrlsRef.current[streamId];
     }
     setLocalThumbNames((prev) => {
       const next = { ...prev };
-      delete next[dayId];
+      delete next[streamId];
       return next;
     });
-    updateDay(dayId, { thumbUrl: "" });
+    updateStream(dayId, streamId, { thumbUrl: "" });
+  };
+
+  const clearLocalThumbnails = () => {
+    Object.values(objectUrlsRef.current).forEach((url) =>
+      URL.revokeObjectURL(url),
+    );
+    objectUrlsRef.current = {};
+    setLocalThumbNames({});
   };
 
   const updateTimeSlot = (
     dayId: string,
+    streamId: string,
     slotId: string,
     patch: Partial<TimeSlot>,
   ) => {
@@ -718,8 +1628,15 @@ export default function SchedulePage() {
         if (day.id !== dayId) return day;
         return {
           ...day,
-          times: day.times.map((slot) =>
-            slot.id === slotId ? { ...slot, ...patch } : slot,
+          streams: day.streams.map((stream) =>
+            stream.id === streamId
+              ? {
+                  ...stream,
+                  times: stream.times.map((slot) =>
+                    slot.id === slotId ? { ...slot, ...patch } : slot,
+                  ),
+                }
+              : stream,
           ),
         };
       }),
@@ -727,28 +1644,91 @@ export default function SchedulePage() {
   };
 
   const handleEmojiPick =
-    (dayId: string, slotId: string) => (emojiData: EmojiClickData) => {
-      updateTimeSlot(dayId, slotId, { customEmoji: emojiData.emoji });
+    (dayId: string, streamId: string, slotId: string) =>
+    (emojiData: EmojiClickData) => {
+      updateTimeSlot(dayId, streamId, slotId, {
+        customEmoji: emojiData.emoji,
+      });
       setActiveEmojiPickerId(null);
     };
 
-  const addTimeSlot = (dayId: string) => {
+  const addTimeSlot = (dayId: string, streamId: string) => {
     setDays((prev) =>
       prev.map((day) =>
         day.id === dayId
-          ? { ...day, times: [...day.times, createTimeSlot()] }
+          ? {
+              ...day,
+              streams: day.streams.map((stream) =>
+                stream.id === streamId
+                  ? { ...stream, times: [...stream.times, createTimeSlot()] }
+                  : stream,
+              ),
+            }
           : day,
       ),
     );
   };
 
-  const removeTimeSlot = (dayId: string, slotId: string) => {
+  const removeTimeSlot = (dayId: string, streamId: string, slotId: string) => {
     setDays((prev) =>
       prev.map((day) =>
         day.id === dayId
-          ? { ...day, times: day.times.filter((slot) => slot.id !== slotId) }
+          ? {
+              ...day,
+              streams: day.streams.map((stream) =>
+                stream.id === streamId
+                  ? {
+                      ...stream,
+                      times: stream.times.filter((slot) => slot.id !== slotId),
+                    }
+                  : stream,
+              ),
+            }
           : day,
       ),
+    );
+  };
+
+  const addStream = (dayId: string) => {
+    const newStream = createStream();
+    setDays((prev) =>
+      prev.map((day) =>
+        day.id === dayId
+          ? { ...day, streams: [...day.streams, newStream] }
+          : day,
+      ),
+    );
+    setSelectedStreamId(newStream.id);
+  };
+
+  const removeStream = (dayId: string, streamId: string) => {
+    const day = days.find((entry) => entry.id === dayId);
+    if (!day || day.streams.length <= 1) return;
+    const existingUrl = objectUrlsRef.current[streamId];
+    if (existingUrl) {
+      URL.revokeObjectURL(existingUrl);
+      delete objectUrlsRef.current[streamId];
+    }
+    setLocalThumbNames((prev) => {
+      if (!prev[streamId]) return prev;
+      const next = { ...prev };
+      delete next[streamId];
+      return next;
+    });
+    setDays((prev) =>
+      prev.map((entry) => {
+        if (entry.id !== dayId) return entry;
+        const nextStreams = entry.streams.filter(
+          (stream) => stream.id !== streamId,
+        );
+        if (selectedStreamId === streamId) {
+          setSelectedStreamId(nextStreams[0]?.id ?? null);
+        }
+        return {
+          ...entry,
+          streams: nextStreams,
+        };
+      }),
     );
   };
 
@@ -756,29 +1736,74 @@ export default function SchedulePage() {
     setPendingDeleteDayId(dayId);
   };
 
+  const requestDeleteStream = (dayId: string, streamId: string) => {
+    setPendingDeleteStream({ dayId, streamId });
+  };
+
   const removeDay = (dayId: string) => {
-    const existingUrl = objectUrlsRef.current[dayId];
-    if (existingUrl) {
-      URL.revokeObjectURL(existingUrl);
-      delete objectUrlsRef.current[dayId];
+    const day = days.find((entry) => entry.id === dayId);
+    if (day) {
+      day.streams.forEach((stream) => {
+        const existingUrl = objectUrlsRef.current[stream.id];
+        if (existingUrl) {
+          URL.revokeObjectURL(existingUrl);
+          delete objectUrlsRef.current[stream.id];
+        }
+      });
+      setLocalThumbNames((prev) => {
+        const next = { ...prev };
+        day.streams.forEach((stream) => {
+          delete next[stream.id];
+        });
+        return next;
+      });
     }
-    setLocalThumbNames((prev) => {
-      if (!prev[dayId]) return prev;
-      const next = { ...prev };
-      delete next[dayId];
-      return next;
-    });
     setDays((prev) => {
       const next = prev.filter((day) => day.id !== dayId);
       if (selectedDayId === dayId) {
         const nextId = next[0]?.id ?? null;
+        const nextStreamId = next[0]?.streams[0]?.id ?? null;
         setSelectedDayId(nextId);
+        setSelectedStreamId(nextStreamId);
         if (selectedElement?.type === "day") {
           setSelectedElement(nextId ? { type: "day", id: nextId } : null);
         }
       }
       return next;
     });
+  };
+
+  const confirmDeleteStream = () => {
+    if (!pendingDeleteStream) return;
+    removeStream(pendingDeleteStream.dayId, pendingDeleteStream.streamId);
+    setPendingDeleteStream(null);
+  };
+
+  const cancelDeleteStream = () => {
+    setPendingDeleteStream(null);
+  };
+
+  const requestClearAll = () => {
+    setPendingDeleteDayId(null);
+    setPendingDeleteStream(null);
+    setPendingClearAll(true);
+  };
+
+  const confirmClearAll = () => {
+    clearLocalThumbnails();
+    setDays([]);
+    setSelectedDayId(null);
+    setSelectedStreamId(null);
+    setPendingDeleteStream(null);
+    if (selectedElement?.type === "day") {
+      setSelectedElement(null);
+    }
+    setPendingDeleteDayId(null);
+    setPendingClearAll(false);
+  };
+
+  const cancelClearAll = () => {
+    setPendingClearAll(false);
   };
 
   const confirmDeleteDay = () => {
@@ -791,8 +1816,333 @@ export default function SchedulePage() {
     setPendingDeleteDayId(null);
   };
 
+  const normalizeScheduleFile = (payload: unknown): ScheduleFile | null => {
+    if (!isRecord(payload)) return null;
+    const rawDays = Array.isArray(payload.days) ? payload.days : null;
+    if (!rawDays) return null;
+    let fallbackId = 1;
+    const makeFallbackId = (prefix: string) =>
+      `${prefix}-imported-${fallbackId++}`;
+    const normalizeSlot = (value: unknown): TimeSlot => {
+      const record = isRecord(value) ? value : {};
+      const zoneId = getString(record.zoneId, "uk");
+      const customLabel = getString(record.customLabel);
+      const customTime = getString(record.customTime);
+      const customZone = getString(record.customZone);
+      const customEmoji = getString(record.customEmoji);
+      const customFlag = isFlagKey(record.customFlag)
+        ? record.customFlag
+        : "globe";
+      const fallbackFlag = zoneId === "custom" ? customFlag : "uk";
+      const flag = isFlagKey(record.flag) ? record.flag : fallbackFlag;
+      return {
+        id: getString(record.id, makeFallbackId("slot")),
+        zoneId,
+        label: getString(record.label),
+        time: getString(record.time),
+        flag,
+        customLabel,
+        customTime,
+        customZone,
+        customEmoji,
+        customFlag,
+      };
+    };
+    const normalizeStream = (value: unknown): Stream => {
+      const record = isRecord(value) ? value : {};
+      return {
+        id: getString(record.id, makeFallbackId("stream")),
+        title: getString(record.title),
+        thumbUrl: getString(record.thumbUrl),
+        baseTime: getString(record.baseTime, "20:30"),
+        times: getArray<unknown>(record.times).map(normalizeSlot),
+      };
+    };
+    const normalizedDays = rawDays.map((value: unknown): StoryDay => {
+      const record = isRecord(value) ? value : {};
+      return {
+        id: getString(record.id, makeFallbackId("day")),
+        day: getString(record.day, "Day"),
+        date: getString(record.date),
+        off: getBoolean(record.off, false),
+        streams: getArray<unknown>(record.streams).map(normalizeStream),
+      };
+    });
+
+    const nextHeaderAlignment =
+      payload.headerAlignment === "center" || payload.headerAlignment === "left"
+        ? payload.headerAlignment
+        : headerAlignment;
+    const nextHeaderTone =
+      payload.headerTone === "soft" || payload.headerTone === "bright"
+        ? payload.headerTone
+        : headerTone;
+    const nextFooterStyle =
+      payload.footerStyle === "glass" || payload.footerStyle === "solid"
+        ? payload.footerStyle
+        : footerStyle;
+    const nextFooterSize =
+      payload.footerSize === "compact" || payload.footerSize === "regular"
+        ? payload.footerSize
+        : footerSize;
+    const nextExportSizeId =
+      typeof payload.exportSizeId === "string" &&
+      isExportSizeId(payload.exportSizeId)
+        ? payload.exportSizeId
+        : exportSizeId;
+    const customVerticalRecord = isRecord(payload.customVerticalSize)
+      ? payload.customVerticalSize
+      : {};
+    const customHorizontalRecord = isRecord(payload.customHorizontalSize)
+      ? payload.customHorizontalSize
+      : {};
+    const nextCustomVerticalSize = {
+      width: getPositiveNumber(
+        customVerticalRecord.width,
+        customVerticalSize.width,
+      ),
+      height: getPositiveNumber(
+        customVerticalRecord.height,
+        customVerticalSize.height,
+      ),
+    };
+    const nextCustomHorizontalSize = {
+      width: getPositiveNumber(
+        customHorizontalRecord.width,
+        customHorizontalSize.width,
+      ),
+      height: getPositiveNumber(
+        customHorizontalRecord.height,
+        customHorizontalSize.height,
+      ),
+    };
+    const themeRecord = isRecord(payload.theme) ? payload.theme : {};
+    const nextThemeBackgroundId =
+      typeof themeRecord.backgroundId === "string" &&
+      themeBackgrounds.some((option) => option.id === themeRecord.backgroundId)
+        ? themeRecord.backgroundId
+        : themeBackgroundId;
+    const nextThemeFontId =
+      typeof themeRecord.fontId === "string" &&
+      themeFonts.some((option) => option.id === themeRecord.fontId)
+        ? themeRecord.fontId
+        : themeFontId;
+    const nextThemeCardStyleId =
+      typeof themeRecord.cardStyleId === "string" &&
+      themeCardStyles.some((option) => option.id === themeRecord.cardStyleId)
+        ? themeRecord.cardStyleId
+        : themeCardStyleId;
+    const nextThemeBorderId =
+      typeof themeRecord.borderId === "string" &&
+      themeBorders.some((option) => option.id === themeRecord.borderId)
+        ? themeRecord.borderId
+        : themeBorderId;
+    const nextThemeBorderWeightId =
+      typeof themeRecord.borderWeightId === "string" &&
+      themeBorderWeights.some(
+        (option) => option.id === themeRecord.borderWeightId,
+      )
+        ? themeRecord.borderWeightId
+        : themeBorderWeightId;
+    return {
+      version: typeof payload.version === "number" ? payload.version : 1,
+      scheduleName: getString(payload.scheduleName, scheduleName),
+      scheduleTimeZone: getString(
+        payload.scheduleTimeZone,
+        scheduleTimeZone,
+      ),
+      exportSizeId: nextExportSizeId,
+      customVerticalSize: nextCustomVerticalSize,
+      customHorizontalSize: nextCustomHorizontalSize,
+      showHeader: getBoolean(payload.showHeader, showHeader),
+      headerTitle: getString(payload.headerTitle, headerTitle),
+      headerAlignment: nextHeaderAlignment,
+      headerTone: nextHeaderTone,
+      showFooter: getBoolean(payload.showFooter, showFooter),
+      footerLink: getString(payload.footerLink, footerLink),
+      footerStyle: nextFooterStyle,
+      footerSize: nextFooterSize,
+      theme: {
+        backgroundId: nextThemeBackgroundId,
+        fontId: nextThemeFontId,
+        cardStyleId: nextThemeCardStyleId,
+        borderId: nextThemeBorderId,
+        borderWeightId: nextThemeBorderWeightId,
+      },
+      days: normalizedDays,
+    };
+  };
+
+  const updateIdRefFromDays = (loadedDays: StoryDay[]) => {
+    let maxId = -1;
+    const collect = (id: string) => {
+      const next = getMaxIdValue(id);
+      if (next === null) return;
+      maxId = Math.max(maxId, next);
+    };
+    loadedDays.forEach((day) => {
+      collect(day.id);
+      day.streams.forEach((stream) => {
+        collect(stream.id);
+        stream.times.forEach((slot) => collect(slot.id));
+      });
+    });
+    if (maxId >= 0) {
+      idRef.current = Math.max(idRef.current, maxId + 1);
+    }
+  };
+
+  const handleScheduleSave = () => {
+    setScheduleFileError(null);
+    const payload = schedulePayload;
+    const safeName = scheduleName
+      .trim()
+      .replace(/[^a-z0-9]+/gi, "-")
+      .replace(/^-+|-+$/g, "")
+      .toLowerCase();
+    const fileName = `${safeName || "schedule"}.schedule`;
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
+
+  const applyLoadedSchedule = (payload: ScheduleFile) => {
+    clearLocalThumbnails();
+    setScheduleName(payload.scheduleName);
+    setScheduleTimeZone(payload.scheduleTimeZone);
+    ensureTimeZoneOption(payload.scheduleTimeZone);
+    setExportSizeId(payload.exportSizeId);
+    syncCustomVerticalSize(payload.customVerticalSize);
+    setShowHeader(payload.showHeader);
+    setHeaderTitle(payload.headerTitle);
+    setHeaderAlignment(payload.headerAlignment);
+    setHeaderTone(payload.headerTone);
+    setShowFooter(payload.showFooter);
+    setFooterLink(payload.footerLink);
+    setFooterStyle(payload.footerStyle);
+    setFooterSize(payload.footerSize);
+    setThemeBackgroundId(payload.theme.backgroundId);
+    setThemeFontId(payload.theme.fontId);
+    setThemeCardStyleId(payload.theme.cardStyleId);
+    setThemeBorderId(payload.theme.borderId);
+    setThemeBorderWeightId(payload.theme.borderWeightId);
+    setDays(payload.days);
+    const nextSelectedDayId = payload.days[0]?.id ?? null;
+    const nextSelectedStreamId = payload.days[0]?.streams[0]?.id ?? null;
+    setSelectedDayId(nextSelectedDayId);
+    setSelectedStreamId(nextSelectedStreamId);
+    setSelectedElement(
+      nextSelectedDayId ? { type: "day", id: nextSelectedDayId } : null,
+    );
+    setActiveEmojiPickerId(null);
+    setPendingDeleteDayId(null);
+    setPendingDeleteStream(null);
+    setPendingClearAll(false);
+    setIsDownloading(false);
+    setExportRequested(false);
+    setIsExportingView(false);
+    updateIdRefFromDays(payload.days);
+    lastPersistedRef.current = JSON.stringify(payload);
+  };
+
+  const handleScheduleLoad = async (file: File) => {
+    setScheduleFileError(null);
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text) as unknown;
+      const normalized = normalizeScheduleFile(parsed);
+      if (!normalized) {
+        setScheduleFileError("Invalid schedule file.");
+        return;
+      }
+      applyLoadedSchedule(normalized);
+    } catch (error) {
+      console.error("Failed to load schedule file", error);
+      setScheduleFileError("Invalid schedule file.");
+    }
+  };
+
+  const handleScheduleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      void handleScheduleLoad(file);
+    }
+    event.currentTarget.value = "";
+  };
+
+  const openShareModal = async () => {
+    if (!scheduleId) return;
+    setShareModalOpen(true);
+    setShareStatus("loading");
+    setShareLink("");
+    setShareError(null);
+
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) {
+      setShareStatus("error");
+      setShareError("Sign in to create a share link.");
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/share", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ scheduleId }),
+      });
+      if (!response.ok) {
+        throw new Error("Unable to create share link.");
+      }
+      const payload = (await response.json()) as { shareToken?: string };
+      if (!payload.shareToken) {
+        throw new Error("Share token missing.");
+      }
+      const link = `${window.location.origin}/share/${payload.shareToken}`;
+      setShareLink(link);
+      setShareStatus("ready");
+    } catch (error) {
+      console.error("Failed to create share link", error);
+      setShareStatus("error");
+      setShareError("Unable to create share link.");
+    }
+  };
+
+  const closeShareModal = () => {
+    setShareModalOpen(false);
+    setShareStatus("idle");
+    setShareLink("");
+    setShareError(null);
+  };
+
+  const handleCopyShare = async () => {
+    if (!shareLink) return;
+    try {
+      await navigator.clipboard.writeText(shareLink);
+    } catch (error) {
+      console.error("Failed to copy share link", error);
+    }
+  };
+
   const handleDownload = () => {
-    if (!previewRef.current || isDownloading || exportRequested) return;
+    if (
+      !previewRef.current ||
+      isDownloading ||
+      exportRequested ||
+      isCopying ||
+      copyRequested
+    ) {
+      return;
+    }
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
@@ -808,6 +2158,33 @@ export default function SchedulePage() {
       return;
     }
     handleDownload();
+  };
+
+  const handleCopy = () => {
+    if (
+      !previewRef.current ||
+      isCopying ||
+      copyRequested ||
+      isDownloading ||
+      exportRequested
+    ) {
+      return;
+    }
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    setSelectedElement(null);
+    setIsExportingView(true);
+    setIsCopying(true);
+    setCopyRequested(true);
+  };
+
+  const handleCopyClick = () => {
+    if (!isPreviewMode) {
+      setIsPreviewMode(true);
+      return;
+    }
+    handleCopy();
   };
 
   useEffect(() => {
@@ -826,12 +2203,15 @@ export default function SchedulePage() {
         await new Promise((resolve) =>
           requestAnimationFrame(() => requestAnimationFrame(resolve)),
         );
+        if (document.fonts?.ready) {
+          await document.fonts.ready;
+        }
+        const fontEmbedCSS = await buildFontEmbedCSS(exportNode);
         const dataUrl = await toPng(exportNode, {
           pixelRatio: 1,
           cacheBust: true,
           includeQueryParams: true,
-          skipFonts: true,
-          fontEmbedCSS: "",
+          fontEmbedCSS,
           width: exportWidth,
           height: exportHeight,
           style: {
@@ -865,7 +2245,7 @@ export default function SchedulePage() {
       }
     };
 
-    runExport();
+    void runExport();
   }, [
     exportRequested,
     isExportingView,
@@ -873,30 +2253,225 @@ export default function SchedulePage() {
     exportHeight,
     scheduleName,
     exportSizeId,
+    selectedExport?.label,
   ]);
+
+  useEffect(() => {
+    if (!copyRequested || !isExportingView) return;
+    const exportNode = previewRef.current;
+    if (!exportNode) {
+      setIsCopying(false);
+      setCopyRequested(false);
+      setIsExportingView(false);
+      return;
+    }
+
+    exportNode.setAttribute("data-exporting", "true");
+    const runCopy = async () => {
+      try {
+        await new Promise((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(resolve)),
+        );
+        if (document.fonts?.ready) {
+          await document.fonts.ready;
+        }
+        const fontEmbedCSS = await buildFontEmbedCSS(exportNode);
+        const blob = await toBlob(exportNode, {
+          pixelRatio: 1,
+          cacheBust: true,
+          includeQueryParams: true,
+          fontEmbedCSS,
+          width: exportWidth,
+          height: exportHeight,
+          style: {
+            transform: "scale(1)",
+            transformOrigin: "top left",
+          },
+        });
+        if (!blob) {
+          throw new Error("Failed to copy image");
+        }
+        if (
+          typeof window === "undefined" ||
+          typeof navigator === "undefined" ||
+          !navigator.clipboard ||
+          typeof (window as typeof window).ClipboardItem === "undefined"
+        ) {
+          throw new Error("Clipboard unavailable");
+        }
+        await navigator.clipboard.write([
+          new (window as typeof window).ClipboardItem({
+            "image/png": blob,
+          }),
+        ]);
+      } catch (error) {
+        console.error("Failed to copy image", error);
+      } finally {
+        exportNode.setAttribute("data-exporting", "false");
+        setIsCopying(false);
+        setCopyRequested(false);
+        setIsExportingView(false);
+      }
+    };
+
+    void runCopy();
+  }, [copyRequested, isExportingView, exportWidth, exportHeight]);
+
+  if (!isScheduleReady) {
+    return (
+      <div className="page-shell min-h-screen">
+        <div className="relative mx-auto flex min-h-screen w-full max-w-3xl items-center px-6 py-16">
+          <div className="w-full rounded-4xl border border-slate-200 bg-white/90 p-8 text-center shadow-[0_24px_60px_rgba(20,27,42,0.12)]">
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
+              Loading
+            </p>
+            <h1 className="font-display mt-4 text-3xl text-slate-900">
+              Loading your studio...
+            </h1>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!authUser) {
+    return (
+      <div className="page-shell min-h-screen">
+        <div className="relative overflow-hidden">
+          <div className="hero-glow pointer-events-none absolute -top-32 right-0 h-90 w-90 opacity-70 blur-3xl" />
+          <header className="relative z-10 mx-auto w-full max-w-6xl px-6 py-6">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[26px] border border-slate-200 bg-white px-4 py-3 shadow-[0_18px_40px_rgba(20,27,42,0.12)]">
+              <Link
+                className="flex items-center gap-3 text-lg font-semibold"
+                href="/"
+              >
+                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-(--accent) text-white">
+                  P
+                </span>
+                Pala&apos;s Stream Schedule Maker
+              </Link>
+              <Link
+                className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
+                href="/"
+              >
+                Back to home
+              </Link>
+            </div>
+          </header>
+
+          <main className="relative z-10 mx-auto w-full max-w-3xl px-6 pb-20 pt-6">
+            <section className="rounded-4xl border border-slate-200 bg-white/90 p-8 text-center shadow-[0_30px_70px_rgba(20,27,42,0.12)]">
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
+                Studio access
+              </p>
+              <h1 className="font-display mt-4 text-3xl text-slate-900">
+                Sign in to open the schedule studio
+              </h1>
+              <p className="mt-3 text-sm text-slate-600">
+                Your schedules sync to your account and the studio saves
+                automatically.
+              </p>
+              <div className="mt-6 flex flex-wrap justify-center gap-3">
+                <Link
+                  className="rounded-full bg-(--accent) px-4 py-2 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(242,107,58,0.28)] transition hover:bg-(--accent-strong)"
+                  href="/account?next=/schedules"
+                >
+                  Sign in to continue
+                </Link>
+                <Link
+                  className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
+                  href="/"
+                >
+                  Back home
+                </Link>
+              </div>
+            </section>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
+  if (!scheduleId) {
+    return (
+      <div className="page-shell min-h-screen">
+        <div className="relative mx-auto flex min-h-screen w-full max-w-3xl items-center px-6 py-16">
+          <div className="w-full rounded-4xl border border-slate-200 bg-white/90 p-8 text-center shadow-[0_24px_60px_rgba(20,27,42,0.12)]">
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
+              Redirecting
+            </p>
+            <h1 className="font-display mt-4 text-3xl text-slate-900">
+              Sending you to your schedules...
+            </h1>
+            <Link
+              className="mt-6 inline-flex rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
+              href="/schedules"
+            >
+              Go now
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (scheduleLoadError) {
+    return (
+      <div className="page-shell min-h-screen">
+        <div className="relative mx-auto flex min-h-screen w-full max-w-3xl items-center px-6 py-16">
+          <div className="w-full rounded-4xl border border-slate-200 bg-white/90 p-8 text-center shadow-[0_24px_60px_rgba(20,27,42,0.12)]">
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
+              Schedule error
+            </p>
+            <h1 className="font-display mt-4 text-3xl text-slate-900">
+              {scheduleLoadError}
+            </h1>
+            <p className="mt-3 text-sm text-slate-600">
+              Pick another schedule or create a new one.
+            </p>
+            <Link
+              className="mt-6 inline-flex rounded-full bg-(--accent) px-4 py-2 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(242,107,58,0.28)] transition hover:bg-(--accent-strong)"
+              href="/schedules"
+            >
+              Back to schedules
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="page-shell min-h-screen">
-      <div className="relative overflow-hidden">
-        <div className="hero-glow pointer-events-none absolute -top-32 left-0 h-[360px] w-[360px] opacity-70 blur-3xl" />
+      <div className="relative">
+        <div className="hero-glow pointer-events-none absolute -top-32 left-0 h-90 w-90 opacity-70 blur-3xl" />
         <header className="relative z-10 mx-auto w-full max-w-6xl px-6 py-6">
-          <div className="flex items-center justify-between rounded-[26px] border border-slate-200 bg-white px-4 py-3 shadow-[0_18px_40px_rgba(20,27,42,0.12)]">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-[26px] border border-slate-200 bg-white px-4 py-3 shadow-[0_18px_40px_rgba(20,27,42,0.12)]">
             <Link className="flex items-center gap-3 text-lg font-semibold" href="/">
-              <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[var(--accent)] text-white">
+              <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-(--accent) text-white">
                 P
               </span>
-              Pala's Stream Schedule Maker
+              Pala&apos;s Stream Schedule Maker
             </Link>
-            <Link
-              className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
-              href="/"
-            >
-              Back to home
-            </Link>
+            <div className="flex flex-wrap items-center gap-2">
+              <AuthStatus />
+              <Link
+                className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
+                href="/schedules"
+              >
+                Your schedules
+              </Link>
+              <Link
+                className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
+                href="/"
+              >
+                Back to home
+              </Link>
+            </div>
           </div>
         </header>
 
-        <main className="relative z-10 mx-auto w-full max-w-[1760px] px-3 pb-20 lg:px-5">
+        <main className="relative z-10 mx-auto w-full max-w-440 px-3 pb-20 lg:px-5">
           <div className="mb-8">
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
               Builder
@@ -911,7 +2486,7 @@ export default function SchedulePage() {
                   onClick={() => setIsPreviewMode(false)}
                   className={`rounded-full px-3 py-1 transition ${
                     !isPreviewMode
-                      ? "bg-[var(--accent)] text-white"
+                      ? "bg-(--accent) text-white"
                       : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
@@ -922,7 +2497,7 @@ export default function SchedulePage() {
                   onClick={() => setIsPreviewMode(true)}
                   className={`rounded-full px-3 py-1 transition ${
                     isPreviewMode
-                      ? "bg-[var(--accent)] text-white"
+                      ? "bg-(--accent) text-white"
                       : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
@@ -940,7 +2515,7 @@ export default function SchedulePage() {
             className={`grid gap-5 ${
               isPreviewMode
                 ? "lg:grid-cols-1"
-                : "lg:grid-cols-[280px_minmax(0,1fr)_280px]"
+                : "lg:grid-cols-[280px_minmax(0,1fr)_280px] items-start"
             }`}
           >
             {!isPreviewMode ? (
@@ -981,44 +2556,345 @@ export default function SchedulePage() {
 
                   <div className="space-y-2">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                      Visual style
+                      Export size
                     </p>
-                    <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-slate-700">
-                      Cream studio
+                    <div className="space-y-2">
+                      {exportSizeOptions.map((size) => (
+                        <div key={size.id} className="space-y-2">
+                          <button
+                            type="button"
+                            onClick={() => setExportSizeId(size.id)}
+                            aria-pressed={exportSizeId === size.id}
+                            className={`flex w-full items-center justify-between rounded-2xl border bg-white px-3 py-2 text-left text-xs font-semibold transition ${
+                              exportSizeId === size.id
+                                ? "border-(--accent) text-slate-900"
+                                : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                            }`}
+                          >
+                            <span className="text-sm font-semibold text-slate-900">
+                              {size.label}
+                            </span>
+                            <span className="text-xs text-slate-500">
+                              {size.width} x {size.height}
+                            </span>
+                          </button>
+                          {size.id === "custom-vertical" &&
+                          exportSizeId === "custom-vertical" ? (
+                            <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-3 py-3">
+                              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                                Custom vertical size
+                              </p>
+                              <div className="mt-2 grid grid-cols-2 gap-2">
+                                <label className="block">
+                                  <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                                    Width
+                                  </span>
+                                  <input
+                                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                                    type="number"
+                                    min={1}
+                                    value={customVerticalSize.width}
+                                    onChange={(event) => {
+                                      const nextWidth = getPositiveNumber(
+                                        event.target.value,
+                                        customVerticalSize.width,
+                                      );
+                                      syncCustomVerticalSize({
+                                        ...customVerticalSize,
+                                        width: nextWidth,
+                                      });
+                                      setExportSizeId("custom-vertical");
+                                    }}
+                                  />
+                                </label>
+                                <label className="block">
+                                  <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                                    Height
+                                  </span>
+                                  <input
+                                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                                    type="number"
+                                    min={1}
+                                    value={customVerticalSize.height}
+                                    onChange={(event) => {
+                                      const nextHeight = getPositiveNumber(
+                                        event.target.value,
+                                        customVerticalSize.height,
+                                      );
+                                      syncCustomVerticalSize({
+                                        ...customVerticalSize,
+                                        height: nextHeight,
+                                      });
+                                      setExportSizeId("custom-vertical");
+                                    }}
+                                  />
+                                </label>
+                              </div>
+                            </div>
+                          ) : null}
+                          {size.id === "custom-horizontal" &&
+                          exportSizeId === "custom-horizontal" ? (
+                            <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-3 py-3">
+                              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                                Custom horizontal size
+                              </p>
+                              <div className="mt-2 grid grid-cols-2 gap-2">
+                                <label className="block">
+                                  <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                                    Width
+                                  </span>
+                                  <input
+                                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                                    type="number"
+                                    min={1}
+                                    value={customHorizontalSize.width}
+                                    onChange={(event) => {
+                                      const nextWidth = getPositiveNumber(
+                                        event.target.value,
+                                        customHorizontalSize.width,
+                                      );
+                                      syncCustomHorizontalSize({
+                                        ...customHorizontalSize,
+                                        width: nextWidth,
+                                      });
+                                      setExportSizeId("custom-horizontal");
+                                    }}
+                                  />
+                                </label>
+                                <label className="block">
+                                  <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                                    Height
+                                  </span>
+                                  <input
+                                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                                    type="number"
+                                    min={1}
+                                    value={customHorizontalSize.height}
+                                    onChange={(event) => {
+                                      const nextHeight = getPositiveNumber(
+                                        event.target.value,
+                                        customHorizontalSize.height,
+                                      );
+                                      syncCustomHorizontalSize({
+                                        ...customHorizontalSize,
+                                        height: nextHeight,
+                                      });
+                                      setExportSizeId("custom-horizontal");
+                                    }}
+                                  />
+                                </label>
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      ))}
                     </div>
                   </div>
 
                   <div className="space-y-2">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                      Export size
+                      Schedule file
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={handleScheduleSave}
+                        className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                      >
+                        Save .schedule
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => scheduleFileInputRef.current?.click()}
+                        className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                      >
+                        Load .schedule
+                      </button>
+                      <input
+                        ref={scheduleFileInputRef}
+                        type="file"
+                        accept=".schedule,application/json"
+                        onChange={handleScheduleFileChange}
+                        className="hidden"
+                      />
+                    </div>
+                    {scheduleFileError ? (
+                      <p className="text-xs text-red-600">
+                        {scheduleFileError}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-[28px] border border-slate-200 bg-white/85 p-6 shadow-[0_20px_50px_rgba(20,27,42,0.08)]">
+                <h2 className="font-display text-xl text-slate-900">
+                  Theme studio
+                </h2>
+                <p className="mt-2 text-sm text-slate-600">
+                  Backgrounds, typography, surfaces, and borders.
+                </p>
+                <div className="mt-4 space-y-4 text-sm text-slate-700">
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      Background
                     </p>
                     <div className="space-y-2">
-                      {exportSizes.map((size) => (
+                      {themeBackgrounds.map((option) => (
                         <button
-                          key={size.id}
+                          key={option.id}
                           type="button"
-                          onClick={() => setExportSizeId(size.id)}
-                          aria-pressed={exportSizeId === size.id}
-                          className={`flex w-full items-center justify-between rounded-2xl border bg-white px-3 py-2 text-left text-xs font-semibold transition ${
-                            exportSizeId === size.id
-                              ? "border-[var(--accent)] text-slate-900"
+                          onClick={() => setThemeBackgroundId(option.id)}
+                          aria-pressed={themeBackgroundId === option.id}
+                          className={`flex w-full items-center gap-3 rounded-2xl border bg-white px-3 py-2 text-left text-xs font-semibold transition ${
+                            themeBackgroundId === option.id
+                              ? "border-(--accent) text-slate-900"
                               : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
                           }`}
                         >
-                          <span className="text-sm font-semibold text-slate-900">
-                            {size.label}
-                          </span>
-                          <span className="text-xs text-slate-500">
-                            {size.width} x {size.height}
+                          <span
+                            className="h-10 w-10 rounded-2xl border border-white/40 shadow-[0_0_0_1px_rgba(15,23,42,0.08)]"
+                            style={{
+                              backgroundImage: option.background,
+                              backgroundSize: "cover",
+                              backgroundPosition: "center",
+                            }}
+                          />
+                          <span>
+                            <span className="block text-sm font-semibold text-slate-900">
+                              {option.label}
+                            </span>
+                            <span className="block text-xs text-slate-500">
+                              {option.description}
+                            </span>
                           </span>
                         </button>
                       ))}
                     </div>
                   </div>
+
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      Font pairing
+                    </p>
+                    <div className="space-y-2">
+                      {themeFonts.map((option) => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => setThemeFontId(option.id)}
+                          aria-pressed={themeFontId === option.id}
+                          className={`flex w-full items-center justify-between rounded-2xl border bg-white px-3 py-2 text-left text-xs font-semibold transition ${
+                            themeFontId === option.id
+                              ? "border-(--accent) text-slate-900"
+                              : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                          }`}
+                        >
+                          <span>
+                            <span
+                              className="block text-sm font-semibold text-slate-900"
+                              style={{ fontFamily: option.heading }}
+                            >
+                              {option.label}
+                            </span>
+                            <span className="block text-xs text-slate-500">
+                              {option.description}
+                            </span>
+                          </span>
+                          <span className="text-xs text-slate-500">Aa</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      Card surface
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {themeCardStyles.map((option) => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => setThemeCardStyleId(option.id)}
+                          aria-pressed={themeCardStyleId === option.id}
+                          className={`flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold transition ${
+                            themeCardStyleId === option.id
+                              ? "border-(--accent) text-slate-900"
+                              : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                          }`}
+                        >
+                          <span
+                            className="h-4 w-4 rounded-md border border-slate-200"
+                            style={{ backgroundColor: option.surfaceStrong }}
+                          />
+                          <span>{option.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      Corners
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {themeBorders.map((option) => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => setThemeBorderId(option.id)}
+                          aria-pressed={themeBorderId === option.id}
+                          className={`flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold transition ${
+                            themeBorderId === option.id
+                              ? "border-(--accent) text-slate-900"
+                              : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                          }`}
+                        >
+                          <span
+                            className="h-4 w-4 border border-slate-300"
+                            style={{ borderRadius: option.cardRadius }}
+                          />
+                          <span>{option.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      {selectedThemeBorder?.description}
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      Border weight
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {themeBorderWeights.map((option) => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => setThemeBorderWeightId(option.id)}
+                          aria-pressed={themeBorderWeightId === option.id}
+                          className={`flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold transition ${
+                            themeBorderWeightId === option.id
+                              ? "border-(--accent) text-slate-900"
+                              : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                          }`}
+                        >
+                          <span
+                            className="h-3 w-8 rounded-full bg-slate-200"
+                            style={{ height: option.frameBorderWidth + 2 }}
+                          />
+                          <span>{option.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                 </div>
               </div>
 
-                <div className="rounded-[28px] border border-slate-200 bg-white/85 p-6 shadow-[0_20px_50px_rgba(20,27,42,0.08)]">
+              <div className="rounded-[28px] border border-slate-200 bg-white/85 p-6 shadow-[0_20px_50px_rgba(20,27,42,0.08)]">
                 <h2 className="font-display text-xl text-slate-900">
                   Elements menu
                 </h2>
@@ -1067,10 +2943,31 @@ export default function SchedulePage() {
                   </div>
                 </div>
               </div>
+
+              <div className="rounded-[28px] border border-red-200 bg-white/85 p-6 shadow-[0_20px_50px_rgba(20,27,42,0.08)]">
+                <h2 className="font-display text-xl text-slate-900">
+                  Danger zone
+                </h2>
+                <p className="mt-2 text-sm text-slate-600">
+                  Remove every day and time slot from the schedule.
+                </p>
+                <button
+                  type="button"
+                  onClick={requestClearAll}
+                  disabled={days.length === 0}
+                  className="mt-4 w-full rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition hover:border-red-300 hover:text-red-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Remove all days
+                </button>
+              </div>
               </aside>
             ) : null}
 
-            <div className="rounded-[32px] border border-slate-200 bg-white/80 p-6 shadow-[0_30px_80px_rgba(20,27,42,0.14)]">
+            <div
+              className={`rounded-4xl border border-slate-200 bg-white/80 p-6 shadow-[0_30px_80px_rgba(20,27,42,0.14)] ${
+                !isPreviewMode ? "sticky top-6 self-start" : ""
+              }`}
+            >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
@@ -1087,8 +2984,8 @@ export default function SchedulePage() {
                   <button
                     type="button"
                     onClick={handleDownloadClick}
-                    disabled={isDownloading || !isPreviewMode}
-                    className="rounded-full bg-[var(--accent)] px-4 py-2 text-white transition hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={isDownloading || isCopying || !isPreviewMode}
+                    className="rounded-full bg-(--accent) px-4 py-2 text-white transition hover:bg-(--accent-strong) disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isDownloading
                       ? "Preparing..."
@@ -1096,10 +2993,39 @@ export default function SchedulePage() {
                         ? "Download PNG"
                         : "Switch to preview mode to download"}
                   </button>
+                  <button
+                    type="button"
+                    onClick={handleCopyClick}
+                    disabled={
+                      isCopying ||
+                      isDownloading ||
+                      !isPreviewMode ||
+                      !canCopyToClipboard
+                    }
+                    className="rounded-full border border-slate-200 bg-white px-4 py-2 text-slate-700 transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isCopying
+                      ? "Copying..."
+                      : isPreviewMode
+                        ? "Copy PNG"
+                        : "Switch to preview mode to copy"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openShareModal}
+                    disabled={!scheduleId}
+                    className="rounded-full border border-slate-200 bg-white px-4 py-2 text-slate-700 transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Share preview
+                  </button>
                 </div>
               </div>
 
-              <div className="mt-6 flex flex-col items-center rounded-[28px] border border-slate-200 bg-[var(--paper)] p-4">
+              <div
+                className={`mt-6 flex flex-col items-center rounded-[28px] border border-slate-200 bg-(--paper) p-4 ${
+                  !isPreviewMode ? "max-h-[calc(100vh-240px)] overflow-y-auto" : ""
+                }`}
+              >
                 <StorySchedulePreview
                   days={previewDays}
                   selectedDayId={selectedDayId}
@@ -1108,22 +3034,25 @@ export default function SchedulePage() {
                       ? null
                       : selectedElement?.type ?? null
                   }
-                  onSelectDay={
+                  onSelectDayAction={
                     isPreviewMode || isExportingView ? () => {} : selectDay
                   }
-                  onSelectHeader={
+                  onSelectHeaderAction={
                     isPreviewMode || isExportingView ? () => {} : selectHeader
                   }
-                  onSelectFooter={
+                  onSelectFooterAction={
                     isPreviewMode || isExportingView ? () => {} : selectFooter
                   }
-                  onAddDay={addDay}
-                  onDeleteDay={requestDeleteDay}
+                  onAddDayAction={addDay}
+                  onDeleteDayAction={requestDeleteDay}
+                  onReorderDayAction={reorderDays}
+                  onReorderStreamAction={reorderStreams}
                   canAddDay={canAddDay}
                   showAddControls={!isPreviewMode && !isExportingView}
                   isExporting={isExportingView}
                   canvasWidth={exportWidth}
                   canvasHeight={exportHeight}
+                  layoutMode={layoutMode}
                   showHeader={showHeader}
                   headerTitle={headerTitle}
                   headerAlignment={headerAlignment}
@@ -1132,6 +3061,7 @@ export default function SchedulePage() {
                   footerLink={footerLink}
                   footerStyle={footerStyle}
                   footerSize={footerSize}
+                  theme={previewTheme}
                   exportRef={previewRef}
                 />
               </div>
@@ -1139,7 +3069,7 @@ export default function SchedulePage() {
 
             {!isPreviewMode ? (
               <aside className="space-y-6">
-                <div className="rounded-[28px] border border-slate-200 bg-[var(--paper)] p-6 shadow-[0_20px_50px_rgba(20,27,42,0.08)]">
+                <div className="rounded-[28px] border border-slate-200 bg-(--paper) p-6 shadow-[0_20px_50px_rgba(20,27,42,0.08)]">
                 <h2 className="font-display text-xl text-slate-900">
                   Inspector
                 </h2>
@@ -1194,7 +3124,7 @@ export default function SchedulePage() {
                         type="checkbox"
                         className="h-4 w-4"
                       />
-                      <span className="text-sm">Day off (no stream)</span>
+                      <span className="text-sm">Day off (no streams)</span>
                     </label>
 
                     <div className="space-y-4">
@@ -1206,15 +3136,87 @@ export default function SchedulePage() {
 
                       {!selectedDay.off ? (
                         <div className="space-y-4">
-                          <label className="block">
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                                Streams
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => addStream(selectedDay.id)}
+                                  className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                                >
+                                  Add stream
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    selectedStream
+                                      ? requestDeleteStream(
+                                          selectedDay.id,
+                                          selectedStream.id,
+                                        )
+                                      : null
+                                  }
+                                  disabled={
+                                    !selectedStream ||
+                                    selectedDay.streams.length <= 1
+                                  }
+                                  className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700 transition hover:border-red-300 hover:text-red-800 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  Remove stream
+                                </button>
+                              </div>
+                            </div>
+
+                            {selectedDay.streams.length === 0 ? (
+                              <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-3 py-3 text-xs text-slate-500">
+                                No streams yet.
+                              </div>
+                            ) : (
+                              <div className="flex flex-wrap gap-2">
+                                {selectedDay.streams.map((stream, index) => {
+                                  const streamLabel =
+                                    stream.title.trim() || `Stream ${index + 1}`;
+                                  const isActive =
+                                    selectedStream?.id === stream.id;
+                                  return (
+                                    <button
+                                      key={stream.id}
+                                      type="button"
+                                      onClick={() =>
+                                        setSelectedStreamId(stream.id)
+                                      }
+                                      aria-pressed={isActive}
+                                      className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                                        isActive
+                                          ? "border-(--accent) text-slate-900"
+                                          : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                                      }`}
+                                    >
+                                      {streamLabel}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                          {!selectedStream ? (
+                            <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-3 py-3 text-xs text-slate-500">
+                              Select a stream to edit its details.
+                            </div>
+                          ) : (
+                            <div className="space-y-4">
+                              <label className="block">
                             <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
                               Stream title
                             </span>
                             <input
                               className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                              value={selectedDay.title}
+                              value={selectedStream.title}
                               onChange={(event) =>
-                                updateDay(selectedDay.id, {
+                                updateStream(selectedDay.id, selectedStream.id, {
                                   title: event.target.value,
                                 })
                               }
@@ -1229,10 +3231,11 @@ export default function SchedulePage() {
                             </span>
                             <input
                               className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                              value={selectedDay.thumbUrl}
+                              value={selectedStream.thumbUrl}
                               onChange={(event) =>
                                 updateThumbnailUrl(
                                   selectedDay.id,
+                                  selectedStream.id,
                                   event.target.value,
                                 )
                               }
@@ -1252,20 +3255,26 @@ export default function SchedulePage() {
                               onChange={(event) => {
                                 const file = event.target.files?.[0];
                                 if (file) {
-                                  handleThumbnailUpload(selectedDay.id, file);
+                                  handleThumbnailUpload(
+                                    selectedDay.id,
+                                    selectedStream.id,
+                                    file,
+                                  );
                                 }
                                 event.currentTarget.value = "";
                               }}
                             />
-                            {localThumbNames[selectedDay.id] ? (
+                            {localThumbNames[selectedStream.id] ? (
                               <p className="mt-2 text-xs text-slate-500">
-                                Local file: {localThumbNames[selectedDay.id]}
+                                Local file: {localThumbNames[selectedStream.id]}
                               </p>
                             ) : null}
                             <button
                               type="button"
-                              onClick={() => clearThumbnail(selectedDay.id)}
-                              disabled={!selectedDay.thumbUrl}
+                              onClick={() =>
+                                clearThumbnail(selectedDay.id, selectedStream.id)
+                              }
+                              disabled={!selectedStream.thumbUrl}
                               className="mt-3 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               Clear thumbnail
@@ -1279,9 +3288,9 @@ export default function SchedulePage() {
                             <div className="mt-2 flex flex-wrap items-center gap-2">
                               <input
                                 className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                                value={selectedDay.baseTime}
+                                value={selectedStream.baseTime}
                                 onChange={(event) =>
-                                  updateDay(selectedDay.id, {
+                                  updateStream(selectedDay.id, selectedStream.id, {
                                     baseTime: event.target.value,
                                   })
                                 }
@@ -1300,22 +3309,24 @@ export default function SchedulePage() {
                               </span>
                               <button
                                 type="button"
-                                onClick={() => addTimeSlot(selectedDay.id)}
+                                onClick={() =>
+                                  addTimeSlot(selectedDay.id, selectedStream.id)
+                                }
                                 className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
                               >
                                 Add slot
                               </button>
                             </div>
 
-                            {selectedDay.times.length === 0 ? (
+                            {selectedStream.times.length === 0 ? (
                               <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-3 py-3 text-xs text-slate-500">
                                 No time slots yet.
                               </div>
                             ) : (
-                              selectedDay.times.map((slot) => {
+                              selectedStream.times.map((slot) => {
                                 const display = getSlotDisplay(
                                   slot,
-                                  selectedDay.baseTime,
+                                  selectedStream.baseTime,
                                 );
                                 const isCustom = slot.zoneId === "custom";
                                 return (
@@ -1327,14 +3338,15 @@ export default function SchedulePage() {
                                       <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
                                         Time zone
                                       </span>
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          removeTimeSlot(
-                                            selectedDay.id,
-                                            slot.id,
-                                          )
-                                        }
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              removeTimeSlot(
+                                                selectedDay.id,
+                                                selectedStream.id,
+                                                slot.id,
+                                              )
+                                            }
                                         className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
                                       >
                                         Remove
@@ -1349,6 +3361,7 @@ export default function SchedulePage() {
                                           onClick={() =>
                                             updateTimeSlot(
                                               selectedDay.id,
+                                              selectedStream.id,
                                               slot.id,
                                               option.id === "custom"
                                                 ? {
@@ -1370,12 +3383,12 @@ export default function SchedulePage() {
                                           aria-pressed={slot.zoneId === option.id}
                                           className={`flex flex-col gap-1 rounded-2xl border px-3 py-2 text-left text-xs font-semibold transition ${
                                             slot.zoneId === option.id
-                                              ? "border-[var(--accent)] text-slate-900"
+                                              ? "border-(--accent) text-slate-900"
                                               : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
                                           }`}
                                         >
                                           <span className="flex items-center gap-2">
-                                            <span className="h-4 w-6 overflow-hidden rounded-[3px] shadow-[0_0_0_1px_rgba(15,23,42,0.12)]">
+                                            <span className="h-4 w-6 shrink-0 overflow-hidden rounded-[3px] shadow-[0_0_0_1px_rgba(15,23,42,0.12)] [&_svg]:block [&_svg]:h-full [&_svg]:w-full">
                                               <FlagIcon flag={option.flag} />
                                             </span>
                                             <span>{option.label}</span>
@@ -1422,6 +3435,7 @@ export default function SchedulePage() {
                                                 <EmojiPicker
                                                   onEmojiClick={handleEmojiPick(
                                                     selectedDay.id,
+                                                    selectedStream.id,
                                                     slot.id,
                                                   )}
                                                 />
@@ -1440,6 +3454,7 @@ export default function SchedulePage() {
                                             onChange={(event) =>
                                               updateTimeSlot(
                                                 selectedDay.id,
+                                                selectedStream.id,
                                                 slot.id,
                                                 {
                                                   customLabel: event.target.value,
@@ -1462,6 +3477,7 @@ export default function SchedulePage() {
                                             onChange={(event) =>
                                               updateTimeSlot(
                                                 selectedDay.id,
+                                                selectedStream.id,
                                                 slot.id,
                                                 { customZone: event.target.value },
                                               )
@@ -1481,6 +3497,7 @@ export default function SchedulePage() {
                                             onChange={(event) =>
                                               updateTimeSlot(
                                                 selectedDay.id,
+                                                selectedStream.id,
                                                 slot.id,
                                                 {
                                                   customTime: event.target.value,
@@ -1499,6 +3516,21 @@ export default function SchedulePage() {
                               })
                             )}
                           </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              requestDeleteStream(
+                                selectedDay.id,
+                                selectedStream.id,
+                              )
+                            }
+                            disabled={selectedDay.streams.length <= 1}
+                            className="w-full rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition hover:border-red-300 hover:text-red-800 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Delete stream
+                          </button>
+                        </div>
+                      )}
                         </div>
                       ) : null}
 
@@ -1541,7 +3573,7 @@ export default function SchedulePage() {
                           aria-pressed={headerAlignment === "left"}
                           className={`flex-1 rounded-2xl border px-3 py-2 text-xs font-semibold transition ${
                             headerAlignment === "left"
-                              ? "border-[var(--accent)] text-slate-900"
+                              ? "border-(--accent) text-slate-900"
                               : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
                           }`}
                         >
@@ -1553,7 +3585,7 @@ export default function SchedulePage() {
                           aria-pressed={headerAlignment === "center"}
                           className={`flex-1 rounded-2xl border px-3 py-2 text-xs font-semibold transition ${
                             headerAlignment === "center"
-                              ? "border-[var(--accent)] text-slate-900"
+                              ? "border-(--accent) text-slate-900"
                               : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
                           }`}
                         >
@@ -1573,7 +3605,7 @@ export default function SchedulePage() {
                           aria-pressed={headerTone === "bright"}
                           className={`flex-1 rounded-2xl border px-3 py-2 text-xs font-semibold transition ${
                             headerTone === "bright"
-                              ? "border-[var(--accent)] text-slate-900"
+                              ? "border-(--accent) text-slate-900"
                               : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
                           }`}
                         >
@@ -1585,7 +3617,7 @@ export default function SchedulePage() {
                           aria-pressed={headerTone === "soft"}
                           className={`flex-1 rounded-2xl border px-3 py-2 text-xs font-semibold transition ${
                             headerTone === "soft"
-                              ? "border-[var(--accent)] text-slate-900"
+                              ? "border-(--accent) text-slate-900"
                               : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
                           }`}
                         >
@@ -1632,7 +3664,7 @@ export default function SchedulePage() {
                           aria-pressed={footerStyle === "solid"}
                           className={`flex-1 rounded-2xl border px-3 py-2 text-xs font-semibold transition ${
                             footerStyle === "solid"
-                              ? "border-[var(--accent)] text-slate-900"
+                              ? "border-(--accent) text-slate-900"
                               : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
                           }`}
                         >
@@ -1644,7 +3676,7 @@ export default function SchedulePage() {
                           aria-pressed={footerStyle === "glass"}
                           className={`flex-1 rounded-2xl border px-3 py-2 text-xs font-semibold transition ${
                             footerStyle === "glass"
-                              ? "border-[var(--accent)] text-slate-900"
+                              ? "border-(--accent) text-slate-900"
                               : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
                           }`}
                         >
@@ -1664,7 +3696,7 @@ export default function SchedulePage() {
                           aria-pressed={footerSize === "regular"}
                           className={`flex-1 rounded-2xl border px-3 py-2 text-xs font-semibold transition ${
                             footerSize === "regular"
-                              ? "border-[var(--accent)] text-slate-900"
+                              ? "border-(--accent) text-slate-900"
                               : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
                           }`}
                         >
@@ -1676,7 +3708,7 @@ export default function SchedulePage() {
                           aria-pressed={footerSize === "compact"}
                           className={`flex-1 rounded-2xl border px-3 py-2 text-xs font-semibold transition ${
                             footerSize === "compact"
-                              ? "border-[var(--accent)] text-slate-900"
+                              ? "border-(--accent) text-slate-900"
                               : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
                           }`}
                         >
@@ -1718,7 +3750,7 @@ export default function SchedulePage() {
                   Remove {pendingDeleteDay?.day || "this day"}?
                 </h3>
                 <p className="mt-2 text-sm text-slate-600">
-                  This will remove the stream and its time slots from the
+                  This will remove the streams and their time slots from the
                   schedule.
                 </p>
                 <div className="mt-5 flex flex-wrap gap-3">
@@ -1735,6 +3767,148 @@ export default function SchedulePage() {
                     className="flex-1 rounded-full bg-red-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-600"
                   >
                     Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+          {pendingDeleteStream ? (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4"
+              onClick={cancelDeleteStream}
+            >
+              <div
+                className="w-full max-w-sm rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_30px_80px_rgba(20,27,42,0.3)]"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
+                  Delete stream
+                </p>
+                <h3 className="mt-2 font-display text-2xl text-slate-900">
+                  Remove{" "}
+                  {pendingDeleteStreamInfo?.stream.title.trim() || "this stream"}
+                  ?
+                </h3>
+                <p className="mt-2 text-sm text-slate-600">
+                  This will remove the stream and its time slots from{" "}
+                  {pendingDeleteStreamInfo?.day.day || "this day"}.
+                </p>
+                <div className="mt-5 flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={cancelDeleteStream}
+                    className="flex-1 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmDeleteStream}
+                    className="flex-1 rounded-full bg-red-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-600"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+          {pendingClearAll ? (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4"
+              onClick={cancelClearAll}
+            >
+              <div
+                className="w-full max-w-sm rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_30px_80px_rgba(20,27,42,0.3)]"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
+                  Clear schedule
+                </p>
+                <h3 className="mt-2 font-display text-2xl text-slate-900">
+                  Remove all days?
+                </h3>
+                <p className="mt-2 text-sm text-slate-600">
+                  This will delete every day, stream, and time slot from the
+                  schedule.
+                </p>
+                <div className="mt-5 flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={cancelClearAll}
+                    className="flex-1 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmClearAll}
+                    className="flex-1 rounded-full bg-red-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-600"
+                  >
+                    Remove all
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+          {shareModalOpen ? (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4"
+              onClick={closeShareModal}
+            >
+              <div
+                className="w-full max-w-sm rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_30px_80px_rgba(20,27,42,0.3)]"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
+                  Share preview
+                </p>
+                <h3 className="mt-2 font-display text-2xl text-slate-900">
+                  Share this schedule
+                </h3>
+                <p className="mt-2 text-sm text-slate-600">
+                  Anyone with the link can view a read-only preview.
+                </p>
+                {shareStatus === "loading" ? (
+                  <p className="mt-4 text-sm text-slate-600">
+                    Generating link...
+                  </p>
+                ) : shareStatus === "error" ? (
+                  <p className="mt-4 text-sm text-amber-600">
+                    {shareError ?? "Unable to create share link."}
+                  </p>
+                ) : (
+                  <div className="mt-4 space-y-3">
+                    <input
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700"
+                      readOnly
+                      value={shareLink}
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={handleCopyShare}
+                        className="flex-1 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+                      >
+                        Copy link
+                      </button>
+                      <a
+                        className="flex-1 rounded-full border border-slate-300 px-4 py-2 text-center text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
+                        href={shareLink}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        Open preview
+                      </a>
+                    </div>
+                  </div>
+                )}
+                <div className="mt-5 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={closeShareModal}
+                    className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                  >
+                    Done
                   </button>
                 </div>
               </div>

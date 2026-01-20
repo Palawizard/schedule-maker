@@ -10,6 +10,11 @@
   --accent: #f26b3a;
   --accent-strong: #d85022;
   --sea: #1c6e62;
+  --font-space-grotesk: "Space Grotesk";
+  --font-fraunces: "Fraunces";
+  --font-sora: "Sora";
+  --font-manrope: "Manrope";
+  --font-playfair-display: "Playfair Display";
 }
 
 @theme inline {
