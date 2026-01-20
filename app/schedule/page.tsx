@@ -19,12 +19,33 @@ const weekDays = [
   "Sunday",
 ];
 
-const exportSizes = [
+type ExportSizeOption = {
+  id: string;
+  label: string;
+  width: number;
+  height: number;
+};
+
+const exportSizes: ExportSizeOption[] = [
   { id: "story", label: "Story", width: 1080, height: 1920 },
   { id: "youtube", label: "YouTube post", width: 1280, height: 720 },
   { id: "x-vertical", label: "X vertical", width: 1080, height: 1920 },
   { id: "x-horizontal", label: "X horizontal", width: 1600, height: 900 },
 ];
+
+const isExportSizeId = (value: string) =>
+  exportSizes.some((size) => size.id === value) ||
+  value === "custom-vertical" ||
+  value === "custom-horizontal";
+
+const normalizeCustomSizes = (width: number, height: number) => {
+  const min = Math.min(width, height);
+  const max = Math.max(width, height);
+  return {
+    vertical: { width: min, height: max },
+    horizontal: { width: max, height: min },
+  };
+};
 
 const fontMimeTypes: Record<string, string> = {
   woff2: "font/woff2",
@@ -559,6 +580,17 @@ const getString = (value: unknown, fallback = "") =>
 const getBoolean = (value: unknown, fallback = false) =>
   typeof value === "boolean" ? value : fallback;
 
+const getPositiveNumber = (value: unknown, fallback: number) => {
+  const numeric =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number.parseInt(value, 10)
+        : Number.NaN;
+  if (!Number.isFinite(numeric) || numeric <= 0) return fallback;
+  return Math.round(numeric);
+};
+
 const getArray = <T,>(value: unknown): T[] =>
   Array.isArray(value) ? (value as T[]) : [];
 
@@ -580,11 +612,18 @@ type ThemeConfig = {
   borderWeightId: string;
 };
 
+type CustomExportSize = {
+  width: number;
+  height: number;
+};
+
 type ScheduleFile = {
   version: number;
   scheduleName: string;
   scheduleTimeZone: string;
   exportSizeId: string;
+  customVerticalSize: CustomExportSize;
+  customHorizontalSize: CustomExportSize;
   showHeader: boolean;
   headerTitle: string;
   headerAlignment: "left" | "center";
@@ -1016,6 +1055,16 @@ export default function SchedulePage() {
   const [exportSizeId, setExportSizeId] = useState(
     exportSizes[0]?.id ?? "story",
   );
+  const [customVerticalSize, setCustomVerticalSize] =
+    useState<CustomExportSize>({
+      width: 1080,
+      height: 1920,
+    });
+  const [customHorizontalSize, setCustomHorizontalSize] =
+    useState<CustomExportSize>({
+      width: 1920,
+      height: 1080,
+    });
   const [themeBackgroundId, setThemeBackgroundId] = useState(
     themeBackgrounds[0]?.id ?? "nebula",
   );
@@ -1079,10 +1128,39 @@ export default function SchedulePage() {
     if (!stream) return null;
     return { day, stream };
   }, [days, pendingDeleteStream]);
+  const syncCustomVerticalSize = (next: CustomExportSize) => {
+    const normalized = normalizeCustomSizes(next.width, next.height);
+    setCustomVerticalSize(normalized.vertical);
+    setCustomHorizontalSize(normalized.horizontal);
+  };
+  const syncCustomHorizontalSize = (next: CustomExportSize) => {
+    const normalized = normalizeCustomSizes(next.width, next.height);
+    setCustomVerticalSize(normalized.vertical);
+    setCustomHorizontalSize(normalized.horizontal);
+  };
+  const exportSizeOptions = useMemo(
+    () => [
+      ...exportSizes,
+      {
+        id: "custom-vertical",
+        label: "Custom vertical (portrait)",
+        width: customVerticalSize.width,
+        height: customVerticalSize.height,
+      },
+      {
+        id: "custom-horizontal",
+        label: "Custom horizontal (landscape)",
+        width: customHorizontalSize.width,
+        height: customHorizontalSize.height,
+      },
+    ],
+    [customHorizontalSize, customVerticalSize],
+  );
   const selectedExport = useMemo(
     () =>
-      exportSizes.find((size) => size.id === exportSizeId) ?? exportSizes[0],
-    [exportSizeId],
+      exportSizeOptions.find((size) => size.id === exportSizeId) ??
+      exportSizeOptions[0],
+    [exportSizeId, exportSizeOptions],
   );
   const selectedThemeBackground = useMemo(
     () =>
@@ -1743,9 +1821,35 @@ export default function SchedulePage() {
         : footerSize;
     const nextExportSizeId =
       typeof payload.exportSizeId === "string" &&
-      exportSizes.some((size) => size.id === payload.exportSizeId)
+      isExportSizeId(payload.exportSizeId)
         ? payload.exportSizeId
         : exportSizeId;
+    const customVerticalRecord = isRecord(payload.customVerticalSize)
+      ? payload.customVerticalSize
+      : {};
+    const customHorizontalRecord = isRecord(payload.customHorizontalSize)
+      ? payload.customHorizontalSize
+      : {};
+    const nextCustomVerticalSize = {
+      width: getPositiveNumber(
+        customVerticalRecord.width,
+        customVerticalSize.width,
+      ),
+      height: getPositiveNumber(
+        customVerticalRecord.height,
+        customVerticalSize.height,
+      ),
+    };
+    const nextCustomHorizontalSize = {
+      width: getPositiveNumber(
+        customHorizontalRecord.width,
+        customHorizontalSize.width,
+      ),
+      height: getPositiveNumber(
+        customHorizontalRecord.height,
+        customHorizontalSize.height,
+      ),
+    };
     const themeRecord = isRecord(payload.theme) ? payload.theme : {};
     const nextThemeBackgroundId =
       typeof themeRecord.backgroundId === "string" &&
@@ -1782,6 +1886,8 @@ export default function SchedulePage() {
         scheduleTimeZone,
       ),
       exportSizeId: nextExportSizeId,
+      customVerticalSize: nextCustomVerticalSize,
+      customHorizontalSize: nextCustomHorizontalSize,
       showHeader: getBoolean(payload.showHeader, showHeader),
       headerTitle: getString(payload.headerTitle, headerTitle),
       headerAlignment: nextHeaderAlignment,
@@ -1827,6 +1933,8 @@ export default function SchedulePage() {
       scheduleName,
       scheduleTimeZone,
       exportSizeId,
+      customVerticalSize,
+      customHorizontalSize,
       showHeader,
       headerTitle,
       headerAlignment,
@@ -1867,6 +1975,7 @@ export default function SchedulePage() {
     setScheduleTimeZone(payload.scheduleTimeZone);
     ensureTimeZoneOption(payload.scheduleTimeZone);
     setExportSizeId(payload.exportSizeId);
+    syncCustomVerticalSize(payload.customVerticalSize);
     setShowHeader(payload.showHeader);
     setHeaderTitle(payload.headerTitle);
     setHeaderAlignment(payload.headerAlignment);
@@ -2120,25 +2229,134 @@ export default function SchedulePage() {
                       Export size
                     </p>
                     <div className="space-y-2">
-                      {exportSizes.map((size) => (
-                        <button
-                          key={size.id}
-                          type="button"
-                          onClick={() => setExportSizeId(size.id)}
-                          aria-pressed={exportSizeId === size.id}
-                          className={`flex w-full items-center justify-between rounded-2xl border bg-white px-3 py-2 text-left text-xs font-semibold transition ${
-                            exportSizeId === size.id
-                              ? "border-(--accent) text-slate-900"
-                              : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
-                          }`}
-                        >
-                          <span className="text-sm font-semibold text-slate-900">
-                            {size.label}
-                          </span>
-                          <span className="text-xs text-slate-500">
-                            {size.width} x {size.height}
-                          </span>
-                        </button>
+                      {exportSizeOptions.map((size) => (
+                        <div key={size.id} className="space-y-2">
+                          <button
+                            type="button"
+                            onClick={() => setExportSizeId(size.id)}
+                            aria-pressed={exportSizeId === size.id}
+                            className={`flex w-full items-center justify-between rounded-2xl border bg-white px-3 py-2 text-left text-xs font-semibold transition ${
+                              exportSizeId === size.id
+                                ? "border-(--accent) text-slate-900"
+                                : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                            }`}
+                          >
+                            <span className="text-sm font-semibold text-slate-900">
+                              {size.label}
+                            </span>
+                            <span className="text-xs text-slate-500">
+                              {size.width} x {size.height}
+                            </span>
+                          </button>
+                          {size.id === "custom-vertical" &&
+                          exportSizeId === "custom-vertical" ? (
+                            <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-3 py-3">
+                              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                                Custom vertical size
+                              </p>
+                              <div className="mt-2 grid grid-cols-2 gap-2">
+                                <label className="block">
+                                  <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                                    Width
+                                  </span>
+                                  <input
+                                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                                    type="number"
+                                    min={1}
+                                    value={customVerticalSize.width}
+                                    onChange={(event) => {
+                                      const nextWidth = getPositiveNumber(
+                                        event.target.value,
+                                        customVerticalSize.width,
+                                      );
+                                      syncCustomVerticalSize({
+                                        ...customVerticalSize,
+                                        width: nextWidth,
+                                      });
+                                      setExportSizeId("custom-vertical");
+                                    }}
+                                  />
+                                </label>
+                                <label className="block">
+                                  <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                                    Height
+                                  </span>
+                                  <input
+                                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                                    type="number"
+                                    min={1}
+                                    value={customVerticalSize.height}
+                                    onChange={(event) => {
+                                      const nextHeight = getPositiveNumber(
+                                        event.target.value,
+                                        customVerticalSize.height,
+                                      );
+                                      syncCustomVerticalSize({
+                                        ...customVerticalSize,
+                                        height: nextHeight,
+                                      });
+                                      setExportSizeId("custom-vertical");
+                                    }}
+                                  />
+                                </label>
+                              </div>
+                            </div>
+                          ) : null}
+                          {size.id === "custom-horizontal" &&
+                          exportSizeId === "custom-horizontal" ? (
+                            <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-3 py-3">
+                              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                                Custom horizontal size
+                              </p>
+                              <div className="mt-2 grid grid-cols-2 gap-2">
+                                <label className="block">
+                                  <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                                    Width
+                                  </span>
+                                  <input
+                                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                                    type="number"
+                                    min={1}
+                                    value={customHorizontalSize.width}
+                                    onChange={(event) => {
+                                      const nextWidth = getPositiveNumber(
+                                        event.target.value,
+                                        customHorizontalSize.width,
+                                      );
+                                      syncCustomHorizontalSize({
+                                        ...customHorizontalSize,
+                                        width: nextWidth,
+                                      });
+                                      setExportSizeId("custom-horizontal");
+                                    }}
+                                  />
+                                </label>
+                                <label className="block">
+                                  <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                                    Height
+                                  </span>
+                                  <input
+                                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                                    type="number"
+                                    min={1}
+                                    value={customHorizontalSize.height}
+                                    onChange={(event) => {
+                                      const nextHeight = getPositiveNumber(
+                                        event.target.value,
+                                        customHorizontalSize.height,
+                                      );
+                                      syncCustomHorizontalSize({
+                                        ...customHorizontalSize,
+                                        height: nextHeight,
+                                      });
+                                      setExportSizeId("custom-horizontal");
+                                    }}
+                                  />
+                                </label>
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
                       ))}
                     </div>
                   </div>
