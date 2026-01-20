@@ -291,17 +291,6 @@ type ThemeBackgroundOption = {
   thumbOverlay: string;
 };
 
-type ThemePaletteOption = {
-  id: string;
-  label: string;
-  description: string;
-  accent: string;
-  accentSoft: string;
-  accentGlow: string;
-  border: string;
-  live: string;
-  liveGlow: string;
-};
 
 type ThemeFontOption = {
   id: string;
@@ -393,63 +382,14 @@ const themeBackgrounds: ThemeBackgroundOption[] = [
   },
 ];
 
-const themePalettes: ThemePaletteOption[] = [
-  {
-    id: "aurora",
-    label: "Aurora",
-    description: "Icy cyan spark",
-    accent: "#38bdf8",
-    accentSoft: "rgba(56,189,248,0.2)",
-    accentGlow: "rgba(56,189,248,0.55)",
-    border: "rgba(255,255,255,0.22)",
-    live: "#f87171",
-    liveGlow: "rgba(248,113,113,0.2)",
-  },
-  {
-    id: "ember",
-    label: "Ember",
-    description: "Hot orange core",
-    accent: "#fb923c",
-    accentSoft: "rgba(251,146,60,0.22)",
-    accentGlow: "rgba(251,146,60,0.55)",
-    border: "rgba(255,255,255,0.22)",
-    live: "#fb7185",
-    liveGlow: "rgba(251,113,133,0.22)",
-  },
-  {
-    id: "rose",
-    label: "Rose",
-    description: "Pink neon edge",
-    accent: "#fb7185",
-    accentSoft: "rgba(251,113,133,0.22)",
-    accentGlow: "rgba(251,113,133,0.55)",
-    border: "rgba(255,255,255,0.2)",
-    live: "#f97316",
-    liveGlow: "rgba(249,115,22,0.22)",
-  },
-  {
-    id: "citrus",
-    label: "Citrus",
-    description: "Lime voltage",
-    accent: "#a3e635",
-    accentSoft: "rgba(163,230,53,0.2)",
-    accentGlow: "rgba(163,230,53,0.5)",
-    border: "rgba(255,255,255,0.2)",
-    live: "#facc15",
-    liveGlow: "rgba(250,204,21,0.22)",
-  },
-  {
-    id: "gold",
-    label: "Gold",
-    description: "Amber flare",
-    accent: "#f59e0b",
-    accentSoft: "rgba(245,158,11,0.2)",
-    accentGlow: "rgba(245,158,11,0.5)",
-    border: "rgba(255,255,255,0.22)",
-    live: "#f97316",
-    liveGlow: "rgba(249,115,22,0.22)",
-  },
-];
+const basePalette = {
+  accent: "#38bdf8",
+  accentSoft: "rgba(56,189,248,0.2)",
+  accentGlow: "rgba(56,189,248,0.55)",
+  border: "rgba(255,255,255,0.22)",
+  live: "#f87171",
+  liveGlow: "rgba(248,113,113,0.2)",
+};
 
 const themeFonts: ThemeFontOption[] = [
   {
@@ -479,6 +419,41 @@ const themeFonts: ThemeFontOption[] = [
     description: "Bold editorial",
     body: 'var(--font-fraunces), var(--font-space-grotesk), serif',
     heading: 'var(--font-fraunces), var(--font-space-grotesk), serif',
+  },
+  {
+    id: "sora-playfair",
+    label: "Sora / Playfair",
+    description: "Geometric body, classic display",
+    body: 'var(--font-sora), "Segoe UI", sans-serif',
+    heading: 'var(--font-playfair-display), var(--font-fraunces), serif',
+  },
+  {
+    id: "playfair-sora",
+    label: "Playfair / Sora",
+    description: "Editorial body, crisp sans",
+    body: 'var(--font-playfair-display), var(--font-fraunces), serif',
+    heading: 'var(--font-sora), var(--font-space-grotesk), sans-serif',
+  },
+  {
+    id: "manrope-fraunces",
+    label: "Manrope / Fraunces",
+    description: "Friendly sans, elegant serif",
+    body: 'var(--font-manrope), "Segoe UI", sans-serif',
+    heading: 'var(--font-fraunces), var(--font-playfair-display), serif',
+  },
+  {
+    id: "manrope-only",
+    label: "Manrope only",
+    description: "Modern sans focus",
+    body: 'var(--font-manrope), "Segoe UI", sans-serif',
+    heading: 'var(--font-manrope), "Segoe UI", sans-serif',
+  },
+  {
+    id: "sora-only",
+    label: "Sora only",
+    description: "Crisp geometric sans",
+    body: 'var(--font-sora), "Segoe UI", sans-serif',
+    heading: 'var(--font-sora), "Segoe UI", sans-serif',
   },
 ];
 
@@ -599,7 +574,6 @@ const getMaxIdValue = (id: string) => {
 
 type ThemeConfig = {
   backgroundId: string;
-  paletteId: string;
   fontId: string;
   cardStyleId: string;
   borderId: string;
@@ -1045,9 +1019,6 @@ export default function SchedulePage() {
   const [themeBackgroundId, setThemeBackgroundId] = useState(
     themeBackgrounds[0]?.id ?? "nebula",
   );
-  const [themePaletteId, setThemePaletteId] = useState(
-    themePalettes[0]?.id ?? "aurora",
-  );
   const [themeFontId, setThemeFontId] = useState(
     themeFonts[0]?.id ?? "grotesk-fraunces",
   );
@@ -1119,12 +1090,6 @@ export default function SchedulePage() {
       themeBackgrounds[0],
     [themeBackgroundId],
   );
-  const selectedThemePalette = useMemo(
-    () =>
-      themePalettes.find((option) => option.id === themePaletteId) ??
-      themePalettes[0],
-    [themePaletteId],
-  );
   const selectedThemeFont = useMemo(
     () =>
       themeFonts.find((option) => option.id === themeFontId) ??
@@ -1155,10 +1120,10 @@ export default function SchedulePage() {
     () => ({
       background: selectedThemeBackground.background,
       thumbOverlay: selectedThemeBackground.thumbOverlay,
-      accent: selectedThemePalette.accent,
-      accentSoft: selectedThemePalette.accentSoft,
-      accentGlow: selectedThemePalette.accentGlow,
-      borderColor: selectedThemePalette.border,
+      accent: basePalette.accent,
+      accentSoft: basePalette.accentSoft,
+      accentGlow: basePalette.accentGlow,
+      borderColor: basePalette.border,
       cardSurface: selectedThemeCardStyle.surface,
       cardSurfaceStrong: selectedThemeCardStyle.surfaceStrong,
       frameRadius: selectedThemeBorder.frameRadius,
@@ -1167,12 +1132,11 @@ export default function SchedulePage() {
       cardBorderWidth: selectedThemeBorderWeight.cardBorderWidth,
       bodyFont: selectedThemeFont.body,
       headingFont: selectedThemeFont.heading,
-      liveColor: selectedThemePalette.live,
-      liveGlow: selectedThemePalette.liveGlow,
+      liveColor: basePalette.live,
+      liveGlow: basePalette.liveGlow,
     }),
     [
       selectedThemeBackground,
-      selectedThemePalette,
       selectedThemeCardStyle,
       selectedThemeBorder,
       selectedThemeBorderWeight,
@@ -1788,11 +1752,6 @@ export default function SchedulePage() {
       themeBackgrounds.some((option) => option.id === themeRecord.backgroundId)
         ? themeRecord.backgroundId
         : themeBackgroundId;
-    const nextThemePaletteId =
-      typeof themeRecord.paletteId === "string" &&
-      themePalettes.some((option) => option.id === themeRecord.paletteId)
-        ? themeRecord.paletteId
-        : themePaletteId;
     const nextThemeFontId =
       typeof themeRecord.fontId === "string" &&
       themeFonts.some((option) => option.id === themeRecord.fontId)
@@ -1833,7 +1792,6 @@ export default function SchedulePage() {
       footerSize: nextFooterSize,
       theme: {
         backgroundId: nextThemeBackgroundId,
-        paletteId: nextThemePaletteId,
         fontId: nextThemeFontId,
         cardStyleId: nextThemeCardStyleId,
         borderId: nextThemeBorderId,
@@ -1879,7 +1837,6 @@ export default function SchedulePage() {
       footerSize,
       theme: {
         backgroundId: themeBackgroundId,
-        paletteId: themePaletteId,
         fontId: themeFontId,
         cardStyleId: themeCardStyleId,
         borderId: themeBorderId,
@@ -1919,7 +1876,6 @@ export default function SchedulePage() {
     setFooterStyle(payload.footerStyle);
     setFooterSize(payload.footerSize);
     setThemeBackgroundId(payload.theme.backgroundId);
-    setThemePaletteId(payload.theme.paletteId);
     setThemeFontId(payload.theme.fontId);
     setThemeCardStyleId(payload.theme.cardStyleId);
     setThemeBorderId(payload.theme.borderId);
@@ -2161,15 +2117,6 @@ export default function SchedulePage() {
 
                   <div className="space-y-2">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                      Visual style
-                    </p>
-                    <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-slate-700">
-                      Cream studio
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
                       Export size
                     </p>
                     <div className="space-y-2">
@@ -2237,7 +2184,7 @@ export default function SchedulePage() {
                   Theme studio
                 </h2>
                 <p className="mt-2 text-sm text-slate-600">
-                  Backgrounds, palettes, typography, and surfaces.
+                  Backgrounds, typography, surfaces, and borders.
                 </p>
                 <div className="mt-4 space-y-4 text-sm text-slate-700">
                   <div className="space-y-2">
@@ -2276,36 +2223,6 @@ export default function SchedulePage() {
                         </button>
                       ))}
                     </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                      Palette
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {themePalettes.map((option) => (
-                        <button
-                          key={option.id}
-                          type="button"
-                          onClick={() => setThemePaletteId(option.id)}
-                          aria-pressed={themePaletteId === option.id}
-                          className={`flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold transition ${
-                            themePaletteId === option.id
-                              ? "border-(--accent) text-slate-900"
-                              : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
-                          }`}
-                        >
-                          <span
-                            className="h-3.5 w-3.5 rounded-full"
-                            style={{ backgroundColor: option.accent }}
-                          />
-                          <span>{option.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                    <p className="text-xs text-slate-500">
-                      {selectedThemePalette?.description}
-                    </p>
                   </div>
 
                   <div className="space-y-2">
