@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase/client";
 
@@ -38,6 +39,8 @@ export default function AuthStatus({
   className,
   showAccountLink = true,
 }: AuthStatusProps) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<ProfileRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -117,6 +120,10 @@ export default function AuthStatus({
     if (!user) return null;
     return getAvatarUrl(user, profile);
   }, [user, profile]);
+  const nextPath = useMemo(() => {
+    const params = searchParams.toString();
+    return `${pathname}${params ? `?${params}` : ""}`;
+  }, [pathname, searchParams]);
 
   const handleSignIn = async () => {
     setIsWorking(true);
@@ -204,7 +211,7 @@ export default function AuthStatus({
           </button>
           <Link
             className="rounded-full border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
-            href="/account"
+            href={`/account?next=${encodeURIComponent(nextPath)}`}
           >
             Email sign in
           </Link>

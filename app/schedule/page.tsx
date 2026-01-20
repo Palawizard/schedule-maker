@@ -4,7 +4,9 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Link from "next/link";
 import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
 import { getFontEmbedCSS, toBlob, toPng } from "html-to-image";
+import type { User } from "@supabase/supabase-js";
 import AuthStatus from "../components/AuthStatus";
+import { supabase } from "@/lib/supabase/client";
 import StorySchedulePreview, {
   StoryDay,
   type PreviewTheme,
@@ -38,6 +40,30 @@ const isExportSizeId = (value: string) =>
   exportSizes.some((size) => size.id === value) ||
   value === "custom-vertical" ||
   value === "custom-horizontal";
+
+const scheduleCookieName = "pala-schedule-draft-v2";
+const scheduleCookieMaxAgeSeconds = 60 * 60 * 24 * 30;
+
+const readCookie = (name: string) => {
+  if (typeof document === "undefined") return null;
+  const entry = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith(`${name}=`));
+  if (!entry) return null;
+  const value = entry.slice(name.length + 1);
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+};
+
+const writeCookie = (name: string, value: string, maxAgeSeconds: number) => {
+  if (typeof document === "undefined" || typeof window === "undefined") return;
+  const encoded = encodeURIComponent(value);
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${name}=${encoded}; Path=/; Max-Age=${maxAgeSeconds}; SameSite=Lax${secure}`;
+};
 
 const normalizeCustomSizes = (width: number, height: number) => {
   const min = Math.min(width, height);
@@ -1025,6 +1051,9 @@ export default function SchedulePage() {
   const idRef = useRef(100);
   const previewRef = useRef<HTMLDivElement>(null);
   const scheduleFileInputRef = useRef<HTMLInputElement>(null);
+  const lastPersistedRef = useRef<string | null>(null);
+  const lastPersistedUserIdRef = useRef<string | null>(null);
+  const persistTimeoutRef = useRef<number | null>(null);
   const [scheduleName, setScheduleName] = useState("Week 24");
   const [timeZoneOptions, setTimeZoneOptions] =
     useState<TimeZoneOption[]>(defaultTimeZones);
@@ -1091,6 +1120,8 @@ export default function SchedulePage() {
   const [copyRequested, setCopyRequested] = useState(false);
   const [isExportingView, setIsExportingView] = useState(false);
   const [canCopyToClipboard, setCanCopyToClipboard] = useState(false);
+  const [authUser, setAuthUser] = useState<User | null>(null);
+  const [isDraftReady, setIsDraftReady] = useState(false);
   const [pendingDeleteDayId, setPendingDeleteDayId] = useState<string | null>(
     null,
   );
@@ -1236,6 +1267,69 @@ export default function SchedulePage() {
     [scheduleTimeZone, timeZoneOptions],
   );
   useEffect(() => {
+    let active = true;
+
+    const loadFromCookie = () => {
+      const stored = readCookie(scheduleCookieName);
+      if (!stored) return null;
+      try {
+        const parsed = JSON.parse(stored) as unknown;
+        return normalizeScheduleFile(parsed);
+      } catch (error) {
+        console.warn("Failed to parse schedule cookie", error);
+        return null;
+      }
+    };
+
+    const loadFromAccount = async (user: User) => {
+      const { data, error } = await supabase
+        .from("schedule_drafts")
+        .select("draft")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (error || !data?.draft) return null;
+      return normalizeScheduleFile(data.draft);
+    };
+
+    const hydrateDraft = async (user: User | null) => {
+      let payload: ScheduleFile | null = null;
+      if (user) {
+        payload = await loadFromAccount(user);
+      }
+      if (!payload) {
+        payload = loadFromCookie();
+      }
+      if (payload && active) {
+        applyLoadedSchedule(payload);
+      }
+    };
+
+    const init = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!active) return;
+      const nextUser = data.session?.user ?? null;
+      setAuthUser(nextUser);
+      await hydrateDraft(nextUser);
+      if (active) {
+        setIsDraftReady(true);
+      }
+    };
+
+    void init();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (!active) return;
+        setAuthUser(session?.user ?? null);
+      },
+    );
+
+    return () => {
+      active = false;
+      authListener?.subscription.unsubscribe();
+    };
+  }, []);
+  useEffect(() => {
     if (typeof navigator === "undefined" || typeof window === "undefined") {
       setCanCopyToClipboard(false);
       return;
@@ -1297,6 +1391,106 @@ export default function SchedulePage() {
       })),
     [days, getSlotDisplay],
   );
+  const schedulePayload = useMemo<ScheduleFile>(
+    () => ({
+      version: 2,
+      scheduleName,
+      scheduleTimeZone,
+      exportSizeId,
+      customVerticalSize,
+      customHorizontalSize,
+      showHeader,
+      headerTitle,
+      headerAlignment,
+      headerTone,
+      showFooter,
+      footerLink,
+      footerStyle,
+      footerSize,
+      theme: {
+        backgroundId: themeBackgroundId,
+        fontId: themeFontId,
+        cardStyleId: themeCardStyleId,
+        borderId: themeBorderId,
+        borderWeightId: themeBorderWeightId,
+      },
+      days,
+    }),
+    [
+      scheduleName,
+      scheduleTimeZone,
+      exportSizeId,
+      customVerticalSize,
+      customHorizontalSize,
+      showHeader,
+      headerTitle,
+      headerAlignment,
+      headerTone,
+      showFooter,
+      footerLink,
+      footerStyle,
+      footerSize,
+      themeBackgroundId,
+      themeFontId,
+      themeCardStyleId,
+      themeBorderId,
+      themeBorderWeightId,
+      days,
+    ],
+  );
+  const schedulePayloadJson = useMemo(
+    () => JSON.stringify(schedulePayload),
+    [schedulePayload],
+  );
+
+  useEffect(() => {
+    if (!isDraftReady) return;
+    const shouldForceUserSave =
+      authUser && lastPersistedUserIdRef.current !== authUser.id;
+    if (
+      !shouldForceUserSave &&
+      schedulePayloadJson === lastPersistedRef.current
+    ) {
+      return;
+    }
+
+    if (persistTimeoutRef.current) {
+      window.clearTimeout(persistTimeoutRef.current);
+    }
+
+    persistTimeoutRef.current = window.setTimeout(() => {
+      lastPersistedRef.current = schedulePayloadJson;
+      if (authUser) {
+        lastPersistedUserIdRef.current = authUser.id;
+      }
+
+      writeCookie(
+        scheduleCookieName,
+        schedulePayloadJson,
+        scheduleCookieMaxAgeSeconds,
+      );
+
+      if (authUser) {
+        void supabase
+          .from("schedule_drafts")
+          .upsert(
+            { user_id: authUser.id, draft: schedulePayload },
+            { onConflict: "user_id" },
+          )
+          .then(({ error }) => {
+            if (error) {
+              console.error("Failed to persist schedule draft", error);
+            }
+          });
+      }
+    }, 700);
+
+    return () => {
+      if (persistTimeoutRef.current) {
+        window.clearTimeout(persistTimeoutRef.current);
+      }
+    };
+  }, [authUser, isDraftReady, schedulePayload, schedulePayloadJson]);
 
   const selectDay = (id: string, streamId?: string) => {
     setSelectedDayId(id);
@@ -1944,30 +2138,7 @@ export default function SchedulePage() {
 
   const handleScheduleSave = () => {
     setScheduleFileError(null);
-    const payload: ScheduleFile = {
-      version: 2,
-      scheduleName,
-      scheduleTimeZone,
-      exportSizeId,
-      customVerticalSize,
-      customHorizontalSize,
-      showHeader,
-      headerTitle,
-      headerAlignment,
-      headerTone,
-      showFooter,
-      footerLink,
-      footerStyle,
-      footerSize,
-      theme: {
-        backgroundId: themeBackgroundId,
-        fontId: themeFontId,
-        cardStyleId: themeCardStyleId,
-        borderId: themeBorderId,
-        borderWeightId: themeBorderWeightId,
-      },
-      days,
-    };
+    const payload = schedulePayload;
     const safeName = scheduleName
       .trim()
       .replace(/[^a-z0-9]+/gi, "-")
@@ -2021,6 +2192,7 @@ export default function SchedulePage() {
     setExportRequested(false);
     setIsExportingView(false);
     updateIdRefFromDays(payload.days);
+    lastPersistedRef.current = JSON.stringify(payload);
   };
 
   const handleScheduleLoad = async (file: File) => {
@@ -2231,6 +2403,81 @@ export default function SchedulePage() {
 
     void runCopy();
   }, [copyRequested, isExportingView, exportWidth, exportHeight]);
+
+  if (!isDraftReady) {
+    return (
+      <div className="page-shell min-h-screen">
+        <div className="relative mx-auto flex min-h-screen w-full max-w-3xl items-center px-6 py-16">
+          <div className="w-full rounded-4xl border border-slate-200 bg-white/90 p-8 text-center shadow-[0_24px_60px_rgba(20,27,42,0.12)]">
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
+              Loading
+            </p>
+            <h1 className="font-display mt-4 text-3xl text-slate-900">
+              Loading your studio...
+            </h1>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!authUser) {
+    return (
+      <div className="page-shell min-h-screen">
+        <div className="relative overflow-hidden">
+          <div className="hero-glow pointer-events-none absolute -top-32 right-0 h-90 w-90 opacity-70 blur-3xl" />
+          <header className="relative z-10 mx-auto w-full max-w-6xl px-6 py-6">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[26px] border border-slate-200 bg-white px-4 py-3 shadow-[0_18px_40px_rgba(20,27,42,0.12)]">
+              <Link
+                className="flex items-center gap-3 text-lg font-semibold"
+                href="/"
+              >
+                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-(--accent) text-white">
+                  P
+                </span>
+                Pala&apos;s Stream Schedule Maker
+              </Link>
+              <Link
+                className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
+                href="/"
+              >
+                Back to home
+              </Link>
+            </div>
+          </header>
+
+          <main className="relative z-10 mx-auto w-full max-w-3xl px-6 pb-20 pt-6">
+            <section className="rounded-4xl border border-slate-200 bg-white/90 p-8 text-center shadow-[0_30px_70px_rgba(20,27,42,0.12)]">
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
+                Studio access
+              </p>
+              <h1 className="font-display mt-4 text-3xl text-slate-900">
+                Sign in to open the schedule studio
+              </h1>
+              <p className="mt-3 text-sm text-slate-600">
+                Your drafts sync to your account and the studio saves
+                automatically.
+              </p>
+              <div className="mt-6 flex flex-wrap justify-center gap-3">
+                <Link
+                  className="rounded-full bg-(--accent) px-4 py-2 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(242,107,58,0.28)] transition hover:bg-(--accent-strong)"
+                  href="/account?next=/schedule"
+                >
+                  Sign in to continue
+                </Link>
+                <Link
+                  className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
+                  href="/"
+                >
+                  Back home
+                </Link>
+              </div>
+            </section>
+          </main>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="page-shell min-h-screen">

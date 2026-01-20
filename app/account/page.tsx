@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase/client";
 
@@ -30,6 +31,8 @@ const getInitials = (label: string) => {
 };
 
 export default function AccountPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<ProfileRecord | null>(null);
   const [displayName, setDisplayName] = useState("");
@@ -41,6 +44,12 @@ export default function AccountPage() {
   const [authPassword, setAuthPassword] = useState("");
   const [authStatus, setAuthStatus] = useState<"idle" | "working">("idle");
   const [authMessage, setAuthMessage] = useState<string | null>(null);
+
+  const nextPath = useMemo(() => {
+    const raw = searchParams.get("next");
+    if (raw && raw.startsWith("/")) return raw;
+    return "/account";
+  }, [searchParams]);
 
   const loadProfile = async (authUser: User, isActive: () => boolean) => {
     const fullName =
@@ -129,7 +138,7 @@ export default function AccountPage() {
   const handleSignIn = async () => {
     setAuthMessage(null);
     const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(
-      "/account",
+      nextPath,
     )}`;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -161,6 +170,7 @@ export default function AccountPage() {
       setAuthMessage(error.message);
     } else {
       setAuthMessage("Signed in.");
+      router.replace(nextPath);
     }
     setAuthStatus("idle");
   };
@@ -174,7 +184,7 @@ export default function AccountPage() {
     setAuthStatus("working");
     setAuthMessage(null);
     const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(
-      "/account",
+      nextPath,
     )}`;
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -185,6 +195,7 @@ export default function AccountPage() {
       setAuthMessage(error.message);
     } else if (data.session) {
       setAuthMessage("Account created and signed in.");
+      router.replace(nextPath);
     } else {
       setAuthMessage("Check your email to confirm your account.");
     }
