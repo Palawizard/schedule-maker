@@ -938,6 +938,12 @@ export default function SchedulePage() {
     null,
   );
   const [isScheduleReady, setIsScheduleReady] = useState(false);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [shareStatus, setShareStatus] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
+  const [shareLink, setShareLink] = useState("");
+  const [shareError, setShareError] = useState<string | null>(null);
   const [pendingDeleteDayId, setPendingDeleteDayId] = useState<string | null>(
     null,
   );
@@ -2070,6 +2076,63 @@ export default function SchedulePage() {
     event.currentTarget.value = "";
   };
 
+  const openShareModal = async () => {
+    if (!scheduleId) return;
+    setShareModalOpen(true);
+    setShareStatus("loading");
+    setShareLink("");
+    setShareError(null);
+
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) {
+      setShareStatus("error");
+      setShareError("Sign in to create a share link.");
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/share", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ scheduleId }),
+      });
+      if (!response.ok) {
+        throw new Error("Unable to create share link.");
+      }
+      const payload = (await response.json()) as { shareToken?: string };
+      if (!payload.shareToken) {
+        throw new Error("Share token missing.");
+      }
+      const link = `${window.location.origin}/share/${payload.shareToken}`;
+      setShareLink(link);
+      setShareStatus("ready");
+    } catch (error) {
+      console.error("Failed to create share link", error);
+      setShareStatus("error");
+      setShareError("Unable to create share link.");
+    }
+  };
+
+  const closeShareModal = () => {
+    setShareModalOpen(false);
+    setShareStatus("idle");
+    setShareLink("");
+    setShareError(null);
+  };
+
+  const handleCopyShare = async () => {
+    if (!shareLink) return;
+    try {
+      await navigator.clipboard.writeText(shareLink);
+    } catch (error) {
+      console.error("Failed to copy share link", error);
+    }
+  };
+
   const handleDownload = () => {
     if (
       !previewRef.current ||
@@ -2947,6 +3010,14 @@ export default function SchedulePage() {
                         ? "Copy PNG"
                         : "Switch to preview mode to copy"}
                   </button>
+                  <button
+                    type="button"
+                    onClick={openShareModal}
+                    disabled={!scheduleId}
+                    className="rounded-full border border-slate-200 bg-white px-4 py-2 text-slate-700 transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Share preview
+                  </button>
                 </div>
               </div>
 
@@ -3774,6 +3845,70 @@ export default function SchedulePage() {
                     className="flex-1 rounded-full bg-red-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-600"
                   >
                     Remove all
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+          {shareModalOpen ? (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4"
+              onClick={closeShareModal}
+            >
+              <div
+                className="w-full max-w-sm rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_30px_80px_rgba(20,27,42,0.3)]"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
+                  Share preview
+                </p>
+                <h3 className="mt-2 font-display text-2xl text-slate-900">
+                  Share this schedule
+                </h3>
+                <p className="mt-2 text-sm text-slate-600">
+                  Anyone with the link can view a read-only preview.
+                </p>
+                {shareStatus === "loading" ? (
+                  <p className="mt-4 text-sm text-slate-600">
+                    Generating link...
+                  </p>
+                ) : shareStatus === "error" ? (
+                  <p className="mt-4 text-sm text-amber-600">
+                    {shareError ?? "Unable to create share link."}
+                  </p>
+                ) : (
+                  <div className="mt-4 space-y-3">
+                    <input
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700"
+                      readOnly
+                      value={shareLink}
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={handleCopyShare}
+                        className="flex-1 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+                      >
+                        Copy link
+                      </button>
+                      <a
+                        className="flex-1 rounded-full border border-slate-300 px-4 py-2 text-center text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
+                        href={shareLink}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        Open preview
+                      </a>
+                    </div>
+                  </div>
+                )}
+                <div className="mt-5 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={closeShareModal}
+                    className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                  >
+                    Done
                   </button>
                 </div>
               </div>

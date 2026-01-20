@@ -11,6 +11,7 @@ import {
   type ScheduleFile,
 } from "../schedule/scheduleData";
 import StorySchedulePreview from "../schedule/StorySchedulePreview";
+import { getLayoutMode, getPreviewSize } from "../schedule/previewUtils";
 
 type ScheduleRow = {
   id: string;
@@ -18,13 +19,6 @@ type ScheduleRow = {
   payload: ScheduleFile;
   updated_at: string;
   created_at: string;
-};
-
-const exportSizeMap: Record<string, { width: number; height: number }> = {
-  story: { width: 1080, height: 1920 },
-  youtube: { width: 1280, height: 720 },
-  "x-vertical": { width: 1080, height: 1920 },
-  "x-horizontal": { width: 1600, height: 900 },
 };
 
 const noop = () => {};
@@ -56,23 +50,6 @@ const getUniqueName = (base: string, existing: string[]) => {
 const clonePayload = (payload: ScheduleFile) =>
   JSON.parse(JSON.stringify(payload)) as ScheduleFile;
 
-const getPreviewSize = (payload: ScheduleFile) => {
-  if (payload.exportSizeId === "custom-vertical") {
-    return payload.customVerticalSize;
-  }
-  if (payload.exportSizeId === "custom-horizontal") {
-    return payload.customHorizontalSize;
-  }
-  return exportSizeMap[payload.exportSizeId] ?? exportSizeMap.story;
-};
-
-const getLayoutMode = (payload: ScheduleFile): "portrait" | "landscape" => {
-  if (payload.exportSizeId === "custom-vertical") return "portrait";
-  if (payload.exportSizeId === "custom-horizontal") return "landscape";
-  const size = exportSizeMap[payload.exportSizeId] ?? exportSizeMap.story;
-  return size.width > size.height ? "landscape" : "portrait";
-};
-
 export default function SchedulesPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
@@ -85,6 +62,12 @@ export default function SchedulesPage() {
   const [pendingRenameId, setPendingRenameId] = useState<string | null>(null);
   const [pendingRenameName, setPendingRenameName] = useState("");
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [pendingShareId, setPendingShareId] = useState<string | null>(null);
+  const [shareLink, setShareLink] = useState("");
+  const [shareStatus, setShareStatus] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
+  const [shareError, setShareError] = useState<string | null>(null);
 
   const scheduleNames = useMemo(
     () =>
@@ -101,6 +84,10 @@ export default function SchedulesPage() {
   const pendingDeleteSchedule = useMemo(
     () => schedules.find((schedule) => schedule.id === pendingDeleteId) ?? null,
     [schedules, pendingDeleteId],
+  );
+  const pendingShareSchedule = useMemo(
+    () => schedules.find((schedule) => schedule.id === pendingShareId) ?? null,
+    [schedules, pendingShareId],
   );
 
   const formatDate = (value: string) =>
@@ -287,6 +274,46 @@ export default function SchedulesPage() {
     setActiveId(null);
   };
 
+  const handleShare = async (schedule: ScheduleRow) => {
+    setPendingShareId(schedule.id);
+    setShareLink("");
+    setShareStatus("loading");
+    setShareError(null);
+
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) {
+      setShareStatus("error");
+      setShareError("Sign in to create a share link.");
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/share", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ scheduleId: schedule.id }),
+      });
+      if (!response.ok) {
+        throw new Error("Unable to create share link.");
+      }
+      const payload = (await response.json()) as { shareToken?: string };
+      if (!payload.shareToken) {
+        throw new Error("Share token missing.");
+      }
+      const link = `${window.location.origin}/share/${payload.shareToken}`;
+      setShareLink(link);
+      setShareStatus("ready");
+    } catch (error) {
+      console.error("Failed to create share link", error);
+      setShareStatus("error");
+      setShareError("Unable to create share link.");
+    }
+  };
+
   const cancelRename = () => {
     setPendingRenameId(null);
     setPendingRenameName("");
@@ -294,6 +321,22 @@ export default function SchedulesPage() {
 
   const cancelDelete = () => {
     setPendingDeleteId(null);
+  };
+
+  const cancelShare = () => {
+    setPendingShareId(null);
+    setShareLink("");
+    setShareStatus("idle");
+    setShareError(null);
+  };
+
+  const handleCopyShare = async () => {
+    if (!shareLink) return;
+    try {
+      await navigator.clipboard.writeText(shareLink);
+    } catch (error) {
+      console.error("Failed to copy share link", error);
+    }
   };
 
   return (
@@ -462,6 +505,14 @@ export default function SchedulesPage() {
                               Duplicate
                             </button>
                             <button
+                              className="rounded-full border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700 transition hover:border-slate-400 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-70"
+                              disabled={activeId === schedule.id}
+                              type="button"
+                              onClick={() => handleShare(schedule)}
+                            >
+                              Share
+                            </button>
+                            <button
                               className="rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-600 transition hover:border-rose-300 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-70"
                               disabled={activeId === schedule.id}
                               type="button"
@@ -567,6 +618,73 @@ export default function SchedulesPage() {
                   className="flex-1 rounded-full bg-red-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+        {pendingShareId ? (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4"
+            onClick={cancelShare}
+          >
+            <div
+              className="w-full max-w-sm rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_30px_80px_rgba(20,27,42,0.3)]"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
+                Share preview
+              </p>
+              <h3 className="mt-2 font-display text-2xl text-slate-900">
+                Share{" "}
+                {pendingShareSchedule?.name ||
+                  pendingShareSchedule?.payload.scheduleName ||
+                  "this schedule"}
+              </h3>
+              <p className="mt-2 text-sm text-slate-600">
+                Anyone with the link can view a read-only preview.
+              </p>
+              {shareStatus === "loading" ? (
+                <p className="mt-4 text-sm text-slate-600">
+                  Generating link...
+                </p>
+              ) : shareStatus === "error" ? (
+                <p className="mt-4 text-sm text-amber-600">
+                  {shareError ?? "Unable to create share link."}
+                </p>
+              ) : (
+                <div className="mt-4 space-y-3">
+                  <input
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700"
+                    readOnly
+                    value={shareLink}
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={handleCopyShare}
+                      className="flex-1 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+                    >
+                      Copy link
+                    </button>
+                    <a
+                      className="flex-1 rounded-full border border-slate-300 px-4 py-2 text-center text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
+                      href={shareLink}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      Open preview
+                    </a>
+                  </div>
+                </div>
+              )}
+              <div className="mt-5 flex justify-end">
+                <button
+                  type="button"
+                  onClick={cancelShare}
+                  className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                >
+                  Done
                 </button>
               </div>
             </div>
