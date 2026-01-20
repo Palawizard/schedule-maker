@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Link from "next/link";
 import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
 import { getFontEmbedCSS, toBlob, toPng } from "html-to-image";
+import AuthStatus from "../components/AuthStatus";
 import StorySchedulePreview, {
   StoryDay,
   type PreviewTheme,
@@ -2236,19 +2237,22 @@ export default function SchedulePage() {
       <div className="relative">
         <div className="hero-glow pointer-events-none absolute -top-32 left-0 h-90 w-90 opacity-70 blur-3xl" />
         <header className="relative z-10 mx-auto w-full max-w-6xl px-6 py-6">
-          <div className="flex items-center justify-between rounded-[26px] border border-slate-200 bg-white px-4 py-3 shadow-[0_18px_40px_rgba(20,27,42,0.12)]">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-[26px] border border-slate-200 bg-white px-4 py-3 shadow-[0_18px_40px_rgba(20,27,42,0.12)]">
             <Link className="flex items-center gap-3 text-lg font-semibold" href="/">
               <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-(--accent) text-white">
                 P
               </span>
               Pala&apos;s Stream Schedule Maker
             </Link>
-            <Link
-              className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
-              href="/"
-            >
-              Back to home
-            </Link>
+            <div className="flex flex-wrap items-center gap-2">
+              <AuthStatus />
+              <Link
+                className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
+                href="/"
+              >
+                Back to home
+              </Link>
+            </div>
           </div>
         </header>
 

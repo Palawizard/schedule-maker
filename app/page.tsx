@@ -1,4 +1,5 @@
 import Link from "next/link";
+import AuthStatus from "./components/AuthStatus";
 
 const features = [
   {
@@ -62,19 +63,22 @@ export default function Home() {
         <div className="hero-glow pointer-events-none absolute -top-40 right-0 h-105 w-105 opacity-80 blur-3xl" />
         <div className="pointer-events-none absolute -left-32 top-40 h-70 w-70 rounded-full bg-(--sea)/15 blur-3xl" />
         <header className="relative z-10 mx-auto w-full max-w-6xl px-6 py-6">
-          <div className="flex items-center justify-between rounded-[26px] border border-slate-200 bg-white px-4 py-3 shadow-[0_18px_40px_rgba(20,27,42,0.12)]">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-[26px] border border-slate-200 bg-white px-4 py-3 shadow-[0_18px_40px_rgba(20,27,42,0.12)]">
             <Link className="flex items-center gap-3 text-lg font-semibold" href="/">
               <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-(--accent) text-white">
                 P
               </span>
               Pala&apos;s Stream Schedule Maker
             </Link>
-            <Link
-              className="rounded-full bg-(--accent) px-4 py-2 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(242,107,58,0.3)] transition hover:bg-(--accent-strong)"
-              href="/schedule"
-            >
-              Launch studio
-            </Link>
+            <div className="flex flex-wrap items-center gap-3">
+              <AuthStatus />
+              <Link
+                className="rounded-full bg-(--accent) px-4 py-2 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(242,107,58,0.3)] transition hover:bg-(--accent-strong)"
+                href="/schedule"
+              >
+                Launch studio
+              </Link>
+            </div>
           </div>
         </header>
 
