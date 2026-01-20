@@ -15,7 +15,7 @@ export default function AuthCallback() {
 
     const finalize = async () => {
       const params = new URLSearchParams(window.location.search);
-      const next = params.get("next") || "/schedule";
+      const next = params.get("next") || "/schedules";
       const code = params.get("code");
       const oauthError = params.get("error_description") || params.get("error");
 
@@ -88,9 +88,9 @@ export default function AuthCallback() {
             <div className="mt-6 flex flex-wrap justify-center gap-3">
               <Link
                 className="rounded-full bg-(--accent) px-4 py-2 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(242,107,58,0.28)] transition hover:bg-(--accent-strong)"
-                href="/schedule"
+                href="/schedules"
               >
-                Go to schedule
+                Go to schedules
               </Link>
               <Link
                 className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:text-slate-900"

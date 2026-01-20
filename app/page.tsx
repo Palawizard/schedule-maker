@@ -74,7 +74,7 @@ export default function Home() {
               <AuthStatus />
               <Link
                 className="rounded-full bg-(--accent) px-4 py-2 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(242,107,58,0.3)] transition hover:bg-(--accent-strong)"
-                href="/schedule"
+                href="/schedules"
               >
                 Launch studio
               </Link>
@@ -98,7 +98,7 @@ export default function Home() {
               <div className="flex flex-wrap gap-3">
                 <Link
                   className="rounded-full bg-(--accent) px-5 py-3 text-sm font-semibold text-white shadow-[0_16px_40px_rgba(242,107,58,0.25)] transition hover:-translate-y-0.5 hover:bg-(--accent-strong)"
-                  href="/schedule"
+                  href="/schedules"
                 >
                   Create my schedule
                 </Link>

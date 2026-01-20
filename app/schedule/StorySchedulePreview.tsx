@@ -165,6 +165,7 @@ type StorySchedulePreviewProps = {
   footerStyle: "solid" | "glass";
   footerSize: "regular" | "compact";
   theme?: PreviewTheme;
+  layoutMode?: "portrait" | "landscape";
   exportRef?: RefObject<HTMLDivElement>;
 };
 
@@ -382,6 +383,7 @@ export default function StorySchedulePreview({
   footerStyle,
   footerSize,
   theme,
+  layoutMode,
   exportRef,
 }: StorySchedulePreviewProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -399,7 +401,9 @@ export default function StorySchedulePreview({
   const [dragOverStreamPosition, setDragOverStreamPosition] = useState<
     "before" | "after" | null
   >(null);
-  const isLandscape = canvasWidth > canvasHeight;
+  const resolvedLayoutMode =
+    layoutMode ?? (canvasWidth > canvasHeight ? "landscape" : "portrait");
+  const isLandscape = resolvedLayoutMode === "landscape";
   const canEdit = showAddControls && !isExporting;
   const previewTheme = theme ?? defaultPreviewTheme;
   const {

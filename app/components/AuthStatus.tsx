@@ -16,15 +16,20 @@ type AuthStatusProps = {
   showAccountLink?: boolean;
 };
 
+const getUserFullName = (user: User) =>
+  user.user_metadata?.full_name || user.user_metadata?.name || null;
+
+const getUserAvatarUrl = (user: User) =>
+  user.user_metadata?.avatar_url || user.user_metadata?.picture || null;
+
 const getDisplayName = (user: User, profile: ProfileRecord | null) =>
   profile?.full_name ||
-  user.user_metadata?.full_name ||
-  user.user_metadata?.name ||
+  getUserFullName(user) ||
   user.email ||
   "Account";
 
 const getAvatarUrl = (user: User, profile: ProfileRecord | null) =>
-  profile?.avatar_url || user.user_metadata?.avatar_url || null;
+  profile?.avatar_url || getUserAvatarUrl(user) || null;
 
 const getInitials = (label: string) => {
   const parts = label.split(" ").filter(Boolean);
@@ -46,11 +51,11 @@ export default function AuthStatus({
   const [isLoading, setIsLoading] = useState(true);
   const [isWorking, setIsWorking] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [avatarFailed, setAvatarFailed] = useState(false);
 
   const loadProfile = async (authUser: User, isActive: () => boolean) => {
-    const fullName =
-      authUser.user_metadata?.full_name || authUser.user_metadata?.name || null;
-    const avatarUrl = authUser.user_metadata?.avatar_url || null;
+    const fullName = getUserFullName(authUser);
+    const avatarUrl = getUserAvatarUrl(authUser);
 
     await supabase.from("profiles").upsert(
       {
@@ -67,6 +72,34 @@ export default function AuthStatus({
       .select("full_name, avatar_url")
       .eq("id", authUser.id)
       .maybeSingle();
+
+    if (data && (fullName || avatarUrl)) {
+      const updatePayload: ProfileRecord = {
+        full_name: data.full_name,
+        avatar_url: data.avatar_url,
+      };
+      if (!data.full_name && fullName) {
+        updatePayload.full_name = fullName;
+      }
+      if (!data.avatar_url && avatarUrl) {
+        updatePayload.avatar_url = avatarUrl;
+      }
+      if (
+        updatePayload.full_name !== data.full_name ||
+        updatePayload.avatar_url !== data.avatar_url
+      ) {
+        const { data: updated } = await supabase
+          .from("profiles")
+          .update(updatePayload)
+          .eq("id", authUser.id)
+          .select("full_name, avatar_url")
+          .maybeSingle();
+        if (isActive()) {
+          setProfile(updated ?? data);
+          return;
+        }
+      }
+    }
 
     if (isActive()) {
       setProfile(data ?? null);
@@ -120,6 +153,9 @@ export default function AuthStatus({
     if (!user) return null;
     return getAvatarUrl(user, profile);
   }, [user, profile]);
+  useEffect(() => {
+    setAvatarFailed(false);
+  }, [avatarUrl]);
   const nextPath = useMemo(() => {
     const params = searchParams.toString();
     return `${pathname}${params ? `?${params}` : ""}`;
@@ -161,10 +197,12 @@ export default function AuthStatus({
               className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-300"
               href="/account"
             >
-              {avatarUrl ? (
+              {avatarUrl && !avatarFailed ? (
                 <img
                   alt={displayName ?? "Account"}
                   className="h-6 w-6 rounded-full object-cover"
+                  onError={() => setAvatarFailed(true)}
+                  referrerPolicy="no-referrer"
                   src={avatarUrl}
                 />
               ) : (
@@ -176,10 +214,12 @@ export default function AuthStatus({
             </Link>
           ) : (
             <span className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
-              {avatarUrl ? (
+              {avatarUrl && !avatarFailed ? (
                 <img
                   alt={displayName ?? "Account"}
                   className="h-6 w-6 rounded-full object-cover"
+                  onError={() => setAvatarFailed(true)}
+                  referrerPolicy="no-referrer"
                   src={avatarUrl}
                 />
               ) : (

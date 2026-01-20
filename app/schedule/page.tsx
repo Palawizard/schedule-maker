@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
 import { getFontEmbedCSS, toBlob, toPng } from "html-to-image";
 import type { User } from "@supabase/supabase-js";
@@ -11,6 +12,11 @@ import StorySchedulePreview, {
   StoryDay,
   type PreviewTheme,
 } from "./StorySchedulePreview";
+import {
+  type CustomExportSize,
+  type ScheduleFile,
+  initialDays,
+} from "./scheduleData";
 
 const weekDays = [
   "Monday",
@@ -41,8 +47,10 @@ const isExportSizeId = (value: string) =>
   value === "custom-vertical" ||
   value === "custom-horizontal";
 
-const scheduleCookieName = "pala-schedule-draft-v2";
+const scheduleCookiePrefix = "pala-schedule-draft-v2";
 const scheduleCookieMaxAgeSeconds = 60 * 60 * 24 * 30;
+const getScheduleCookieName = (scheduleId: string) =>
+  `${scheduleCookiePrefix}-${scheduleId}`;
 
 const readCookie = (name: string) => {
   if (typeof document === "undefined") return null;
@@ -63,15 +71,6 @@ const writeCookie = (name: string, value: string, maxAgeSeconds: number) => {
   const encoded = encodeURIComponent(value);
   const secure = window.location.protocol === "https:" ? "; Secure" : "";
   document.cookie = `${name}=${encoded}; Path=/; Max-Age=${maxAgeSeconds}; SameSite=Lax${secure}`;
-};
-
-const normalizeCustomSizes = (width: number, height: number) => {
-  const min = Math.min(width, height);
-  const max = Math.max(width, height);
-  return {
-    vertical: { width: min, height: max },
-    horizontal: { width: max, height: min },
-  };
 };
 
 const fontMimeTypes: Record<string, string> = {
@@ -631,39 +630,6 @@ const getMaxIdValue = (id: string) => {
   }, -1);
 };
 
-type ThemeConfig = {
-  backgroundId: string;
-  fontId: string;
-  cardStyleId: string;
-  borderId: string;
-  borderWeightId: string;
-};
-
-type CustomExportSize = {
-  width: number;
-  height: number;
-};
-
-type ScheduleFile = {
-  version: number;
-  scheduleName: string;
-  scheduleTimeZone: string;
-  exportSizeId: string;
-  customVerticalSize: CustomExportSize;
-  customHorizontalSize: CustomExportSize;
-  showHeader: boolean;
-  headerTitle: string;
-  headerAlignment: "left" | "center";
-  headerTone: "bright" | "soft";
-  showFooter: boolean;
-  footerLink: string;
-  footerStyle: "solid" | "glass";
-  footerSize: "regular" | "compact";
-  theme: ThemeConfig;
-  days: StoryDay[];
-};
-
-
 const parseTimeValue = (value: string) => {
   const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
   if (!match) return null;
@@ -882,162 +848,6 @@ function FlagIcon({ flag }: { flag: FlagKey }) {
   );
 }
 
-const initialDays: StoryDay[] = [
-  {
-    id: "day-1",
-    day: "Tuesday",
-    date: "Jan 12",
-    off: false,
-    streams: [
-      {
-        id: "stream-1",
-        title: "Test Stream then VRChat pics!",
-        thumbUrl:
-          "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/438100/capsule_616x353.jpg?t=1762366454",
-        baseTime: "20:30",
-        times: [
-          {
-            id: "slot-1",
-            zoneId: "uk",
-            label: "",
-            time: "",
-            flag: "uk",
-            customLabel: "",
-            customTime: "",
-            customZone: "",
-            customEmoji: "",
-            customFlag: "globe",
-          },
-          {
-            id: "slot-2",
-            zoneId: "us-et",
-            label: "",
-            time: "",
-            flag: "us",
-            customLabel: "",
-            customTime: "",
-            customZone: "",
-            customEmoji: "",
-            customFlag: "globe",
-          },
-        ],
-      },
-    ],
-  },
-  {
-    id: "day-2",
-    day: "Wednesday",
-    date: "",
-    off: true,
-    streams: [
-      {
-        id: "stream-2",
-        title: "",
-        thumbUrl: "",
-        baseTime: "20:30",
-        times: [],
-      },
-    ],
-  },
-  {
-    id: "day-3",
-    day: "Thursday",
-    date: "Jan 14",
-    off: false,
-    streams: [
-      {
-        id: "stream-3",
-        title: "Valorant ranked!",
-        thumbUrl:
-          "https://image.jeuxvideo.com/medias-sm/158341/1583411902-8477-jaquette-avant.jpg",
-        baseTime: "20:30",
-        times: [
-          {
-            id: "slot-3",
-            zoneId: "uk",
-            label: "",
-            time: "",
-            flag: "uk",
-            customLabel: "",
-            customTime: "",
-            customZone: "",
-            customEmoji: "",
-            customFlag: "globe",
-          },
-          {
-            id: "slot-4",
-            zoneId: "us-et",
-            label: "",
-            time: "",
-            flag: "us",
-            customLabel: "",
-            customTime: "",
-            customZone: "",
-            customEmoji: "",
-            customFlag: "globe",
-          },
-        ],
-      },
-    ],
-  },
-  {
-    id: "day-4",
-    day: "Friday",
-    date: "",
-    off: true,
-    streams: [
-      {
-        id: "stream-4",
-        title: "",
-        thumbUrl: "",
-        baseTime: "20:30",
-        times: [],
-      },
-    ],
-  },
-  {
-    id: "day-5",
-    day: "Saturday",
-    date: "Jan 16",
-    off: false,
-    streams: [
-      {
-        id: "stream-5",
-        title: "Starting an hardcore world!",
-        thumbUrl:
-          "https://www.nintendo.com/eu/media/images/10_share_images/games_15/nintendo_switch_4/2x1_NSwitch_Minecraft.jpg",
-        baseTime: "20:30",
-        times: [
-          {
-            id: "slot-5",
-            zoneId: "uk",
-            label: "",
-            time: "",
-            flag: "uk",
-            customLabel: "",
-            customTime: "",
-            customZone: "",
-            customEmoji: "",
-            customFlag: "globe",
-          },
-          {
-            id: "slot-6",
-            zoneId: "us-et",
-            label: "",
-            time: "",
-            flag: "us",
-            customLabel: "",
-            customTime: "",
-            customZone: "",
-            customEmoji: "",
-            customFlag: "globe",
-          },
-        ],
-      },
-    ],
-  },
-];
-
 type Stream = StoryDay["streams"][number];
 type TimeSlot = Stream["times"][number];
 
@@ -1048,11 +858,13 @@ type SelectedElement =
   | null;
 
 export default function SchedulePage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const scheduleId = useMemo(() => searchParams.get("id"), [searchParams]);
   const idRef = useRef(100);
   const previewRef = useRef<HTMLDivElement>(null);
   const scheduleFileInputRef = useRef<HTMLInputElement>(null);
   const lastPersistedRef = useRef<string | null>(null);
-  const lastPersistedUserIdRef = useRef<string | null>(null);
   const persistTimeoutRef = useRef<number | null>(null);
   const [scheduleName, setScheduleName] = useState("Week 24");
   const [timeZoneOptions, setTimeZoneOptions] =
@@ -1121,7 +933,11 @@ export default function SchedulePage() {
   const [isExportingView, setIsExportingView] = useState(false);
   const [canCopyToClipboard, setCanCopyToClipboard] = useState(false);
   const [authUser, setAuthUser] = useState<User | null>(null);
-  const [isDraftReady, setIsDraftReady] = useState(false);
+  const [scheduleRecordId, setScheduleRecordId] = useState<string | null>(null);
+  const [scheduleLoadError, setScheduleLoadError] = useState<string | null>(
+    null,
+  );
+  const [isScheduleReady, setIsScheduleReady] = useState(false);
   const [pendingDeleteDayId, setPendingDeleteDayId] = useState<string | null>(
     null,
   );
@@ -1164,14 +980,16 @@ export default function SchedulePage() {
     return { day, stream };
   }, [days, pendingDeleteStream]);
   const syncCustomVerticalSize = (next: CustomExportSize) => {
-    const normalized = normalizeCustomSizes(next.width, next.height);
-    setCustomVerticalSize(normalized.vertical);
-    setCustomHorizontalSize(normalized.horizontal);
+    setCustomVerticalSize((prev) => ({
+      width: getPositiveNumber(next.width, prev.width),
+      height: getPositiveNumber(next.height, prev.height),
+    }));
   };
   const syncCustomHorizontalSize = (next: CustomExportSize) => {
-    const normalized = normalizeCustomSizes(next.width, next.height);
-    setCustomVerticalSize(normalized.vertical);
-    setCustomHorizontalSize(normalized.horizontal);
+    setCustomHorizontalSize((prev) => ({
+      width: getPositiveNumber(next.width, prev.width),
+      height: getPositiveNumber(next.height, prev.height),
+    }));
   };
   const exportSizeOptions = useMemo(
     () => [
@@ -1229,6 +1047,11 @@ export default function SchedulePage() {
   );
   const exportWidth = selectedExport?.width ?? 1080;
   const exportHeight = selectedExport?.height ?? 1920;
+  const layoutMode = useMemo<"portrait" | "landscape">(() => {
+    if (exportSizeId === "custom-vertical") return "portrait";
+    if (exportSizeId === "custom-horizontal") return "landscape";
+    return exportWidth > exportHeight ? "landscape" : "portrait";
+  }, [exportHeight, exportSizeId, exportWidth]);
   const previewTheme = useMemo<PreviewTheme>(
     () => ({
       background: selectedThemeBackground.background,
@@ -1268,9 +1091,11 @@ export default function SchedulePage() {
   );
   useEffect(() => {
     let active = true;
+    setScheduleLoadError(null);
 
     const loadFromCookie = () => {
-      const stored = readCookie(scheduleCookieName);
+      if (!scheduleId) return null;
+      const stored = readCookie(getScheduleCookieName(scheduleId));
       if (!stored) return null;
       try {
         const parsed = JSON.parse(stored) as unknown;
@@ -1281,27 +1106,18 @@ export default function SchedulePage() {
       }
     };
 
-    const loadFromAccount = async (user: User) => {
+    const loadFromAccount = async (user: User, id: string) => {
       const { data, error } = await supabase
-        .from("schedule_drafts")
-        .select("draft")
+        .from("schedules")
+        .select("id, payload")
+        .eq("id", id)
         .eq("user_id", user.id)
         .maybeSingle();
-      if (error || !data?.draft) return null;
-      return normalizeScheduleFile(data.draft);
-    };
-
-    const hydrateDraft = async (user: User | null) => {
-      let payload: ScheduleFile | null = null;
-      if (user) {
-        payload = await loadFromAccount(user);
+      if (error || !data?.payload) return null;
+      if (active) {
+        setScheduleRecordId(data.id);
       }
-      if (!payload) {
-        payload = loadFromCookie();
-      }
-      if (payload && active) {
-        applyLoadedSchedule(payload);
-      }
+      return normalizeScheduleFile(data.payload);
     };
 
     const init = async () => {
@@ -1309,9 +1125,31 @@ export default function SchedulePage() {
       if (!active) return;
       const nextUser = data.session?.user ?? null;
       setAuthUser(nextUser);
-      await hydrateDraft(nextUser);
+      if (!nextUser) {
+        if (active) {
+          setIsScheduleReady(true);
+        }
+        return;
+      }
+      if (!scheduleId) {
+        if (active) {
+          setIsScheduleReady(true);
+        }
+        return;
+      }
+
+      let payload: ScheduleFile | null = null;
+      payload = await loadFromAccount(nextUser, scheduleId);
+      if (!payload) {
+        payload = loadFromCookie();
+      }
+      if (payload && active) {
+        applyLoadedSchedule(payload);
+      } else if (active) {
+        setScheduleLoadError("Schedule not found.");
+      }
       if (active) {
-        setIsDraftReady(true);
+        setIsScheduleReady(true);
       }
     };
 
@@ -1328,7 +1166,17 @@ export default function SchedulePage() {
       active = false;
       authListener?.subscription.unsubscribe();
     };
-  }, []);
+  }, [scheduleId]);
+  useEffect(() => {
+    lastPersistedRef.current = null;
+    setScheduleRecordId(null);
+  }, [scheduleId]);
+  useEffect(() => {
+    if (!isScheduleReady || !authUser) return;
+    if (!scheduleId) {
+      router.replace("/schedules");
+    }
+  }, [authUser, isScheduleReady, scheduleId, router]);
   useEffect(() => {
     if (typeof navigator === "undefined" || typeof window === "undefined") {
       setCanCopyToClipboard(false);
@@ -1444,15 +1292,8 @@ export default function SchedulePage() {
   );
 
   useEffect(() => {
-    if (!isDraftReady) return;
-    const shouldForceUserSave =
-      authUser && lastPersistedUserIdRef.current !== authUser.id;
-    if (
-      !shouldForceUserSave &&
-      schedulePayloadJson === lastPersistedRef.current
-    ) {
-      return;
-    }
+    if (!isScheduleReady || !scheduleId) return;
+    if (schedulePayloadJson === lastPersistedRef.current) return;
 
     if (persistTimeoutRef.current) {
       window.clearTimeout(persistTimeoutRef.current);
@@ -1460,26 +1301,28 @@ export default function SchedulePage() {
 
     persistTimeoutRef.current = window.setTimeout(() => {
       lastPersistedRef.current = schedulePayloadJson;
-      if (authUser) {
-        lastPersistedUserIdRef.current = authUser.id;
-      }
 
       writeCookie(
-        scheduleCookieName,
+        getScheduleCookieName(scheduleId),
         schedulePayloadJson,
         scheduleCookieMaxAgeSeconds,
       );
 
       if (authUser) {
         void supabase
-          .from("schedule_drafts")
+          .from("schedules")
           .upsert(
-            { user_id: authUser.id, draft: schedulePayload },
-            { onConflict: "user_id" },
+            {
+              id: scheduleRecordId ?? scheduleId,
+              user_id: authUser.id,
+              name: schedulePayload.scheduleName,
+              payload: schedulePayload,
+            },
+            { onConflict: "id" },
           )
           .then(({ error }) => {
             if (error) {
-              console.error("Failed to persist schedule draft", error);
+              console.error("Failed to persist schedule", error);
             }
           });
       }
@@ -1490,7 +1333,14 @@ export default function SchedulePage() {
         window.clearTimeout(persistTimeoutRef.current);
       }
     };
-  }, [authUser, isDraftReady, schedulePayload, schedulePayloadJson]);
+  }, [
+    authUser,
+    isScheduleReady,
+    scheduleId,
+    scheduleRecordId,
+    schedulePayload,
+    schedulePayloadJson,
+  ]);
 
   const selectDay = (id: string, streamId?: string) => {
     setSelectedDayId(id);
@@ -2404,7 +2254,7 @@ export default function SchedulePage() {
     void runCopy();
   }, [copyRequested, isExportingView, exportWidth, exportHeight]);
 
-  if (!isDraftReady) {
+  if (!isScheduleReady) {
     return (
       <div className="page-shell min-h-screen">
         <div className="relative mx-auto flex min-h-screen w-full max-w-3xl items-center px-6 py-16">
@@ -2455,13 +2305,13 @@ export default function SchedulePage() {
                 Sign in to open the schedule studio
               </h1>
               <p className="mt-3 text-sm text-slate-600">
-                Your drafts sync to your account and the studio saves
+                Your schedules sync to your account and the studio saves
                 automatically.
               </p>
               <div className="mt-6 flex flex-wrap justify-center gap-3">
                 <Link
                   className="rounded-full bg-(--accent) px-4 py-2 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(242,107,58,0.28)] transition hover:bg-(--accent-strong)"
-                  href="/account?next=/schedule"
+                  href="/account?next=/schedules"
                 >
                   Sign in to continue
                 </Link>
@@ -2474,6 +2324,55 @@ export default function SchedulePage() {
               </div>
             </section>
           </main>
+        </div>
+      </div>
+    );
+  }
+
+  if (!scheduleId) {
+    return (
+      <div className="page-shell min-h-screen">
+        <div className="relative mx-auto flex min-h-screen w-full max-w-3xl items-center px-6 py-16">
+          <div className="w-full rounded-4xl border border-slate-200 bg-white/90 p-8 text-center shadow-[0_24px_60px_rgba(20,27,42,0.12)]">
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
+              Redirecting
+            </p>
+            <h1 className="font-display mt-4 text-3xl text-slate-900">
+              Sending you to your schedules...
+            </h1>
+            <Link
+              className="mt-6 inline-flex rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
+              href="/schedules"
+            >
+              Go now
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (scheduleLoadError) {
+    return (
+      <div className="page-shell min-h-screen">
+        <div className="relative mx-auto flex min-h-screen w-full max-w-3xl items-center px-6 py-16">
+          <div className="w-full rounded-4xl border border-slate-200 bg-white/90 p-8 text-center shadow-[0_24px_60px_rgba(20,27,42,0.12)]">
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
+              Schedule error
+            </p>
+            <h1 className="font-display mt-4 text-3xl text-slate-900">
+              {scheduleLoadError}
+            </h1>
+            <p className="mt-3 text-sm text-slate-600">
+              Pick another schedule or create a new one.
+            </p>
+            <Link
+              className="mt-6 inline-flex rounded-full bg-(--accent) px-4 py-2 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(242,107,58,0.28)] transition hover:bg-(--accent-strong)"
+              href="/schedules"
+            >
+              Back to schedules
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -2493,6 +2392,12 @@ export default function SchedulePage() {
             </Link>
             <div className="flex flex-wrap items-center gap-2">
               <AuthStatus />
+              <Link
+                className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
+                href="/schedules"
+              >
+                Your schedules
+              </Link>
               <Link
                 className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
                 href="/"
@@ -3076,6 +2981,7 @@ export default function SchedulePage() {
                   isExporting={isExportingView}
                   canvasWidth={exportWidth}
                   canvasHeight={exportHeight}
+                  layoutMode={layoutMode}
                   showHeader={showHeader}
                   headerTitle={headerTitle}
                   headerAlignment={headerAlignment}
