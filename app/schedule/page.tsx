@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Link from "next/link";
 import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
-import { getFontEmbedCSS, toPng } from "html-to-image";
+import { getFontEmbedCSS, toBlob, toPng } from "html-to-image";
 import StorySchedulePreview, {
   StoryDay,
   type PreviewTheme,
@@ -1085,8 +1085,11 @@ export default function SchedulePage() {
   );
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isCopying, setIsCopying] = useState(false);
   const [exportRequested, setExportRequested] = useState(false);
+  const [copyRequested, setCopyRequested] = useState(false);
   const [isExportingView, setIsExportingView] = useState(false);
+  const [canCopyToClipboard, setCanCopyToClipboard] = useState(false);
   const [pendingDeleteDayId, setPendingDeleteDayId] = useState<string | null>(
     null,
   );
@@ -1231,6 +1234,18 @@ export default function SchedulePage() {
       scheduleTimeZone,
     [scheduleTimeZone, timeZoneOptions],
   );
+  useEffect(() => {
+    if (typeof navigator === "undefined" || typeof window === "undefined") {
+      setCanCopyToClipboard(false);
+      return;
+    }
+    setCanCopyToClipboard(
+      Boolean(
+        navigator.clipboard &&
+          typeof (window as typeof window).ClipboardItem !== "undefined",
+      ),
+    );
+  }, []);
   const getSlotDisplay = useMemo(
     () =>
       (slot: TimeSlot, baseTime: string) => {
@@ -2033,7 +2048,15 @@ export default function SchedulePage() {
   };
 
   const handleDownload = () => {
-    if (!previewRef.current || isDownloading || exportRequested) return;
+    if (
+      !previewRef.current ||
+      isDownloading ||
+      exportRequested ||
+      isCopying ||
+      copyRequested
+    ) {
+      return;
+    }
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
@@ -2049,6 +2072,33 @@ export default function SchedulePage() {
       return;
     }
     handleDownload();
+  };
+
+  const handleCopy = () => {
+    if (
+      !previewRef.current ||
+      isCopying ||
+      copyRequested ||
+      isDownloading ||
+      exportRequested
+    ) {
+      return;
+    }
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    setSelectedElement(null);
+    setIsExportingView(true);
+    setIsCopying(true);
+    setCopyRequested(true);
+  };
+
+  const handleCopyClick = () => {
+    if (!isPreviewMode) {
+      setIsPreviewMode(true);
+      return;
+    }
+    handleCopy();
   };
 
   useEffect(() => {
@@ -2119,6 +2169,67 @@ export default function SchedulePage() {
     exportSizeId,
     selectedExport?.label,
   ]);
+
+  useEffect(() => {
+    if (!copyRequested || !isExportingView) return;
+    const exportNode = previewRef.current;
+    if (!exportNode) {
+      setIsCopying(false);
+      setCopyRequested(false);
+      setIsExportingView(false);
+      return;
+    }
+
+    exportNode.setAttribute("data-exporting", "true");
+    const runCopy = async () => {
+      try {
+        await new Promise((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(resolve)),
+        );
+        if (document.fonts?.ready) {
+          await document.fonts.ready;
+        }
+        const fontEmbedCSS = await buildFontEmbedCSS(exportNode);
+        const blob = await toBlob(exportNode, {
+          pixelRatio: 1,
+          cacheBust: true,
+          includeQueryParams: true,
+          fontEmbedCSS,
+          width: exportWidth,
+          height: exportHeight,
+          style: {
+            transform: "scale(1)",
+            transformOrigin: "top left",
+          },
+        });
+        if (!blob) {
+          throw new Error("Failed to copy image");
+        }
+        if (
+          typeof window === "undefined" ||
+          typeof navigator === "undefined" ||
+          !navigator.clipboard ||
+          typeof (window as typeof window).ClipboardItem === "undefined"
+        ) {
+          throw new Error("Clipboard unavailable");
+        }
+        await navigator.clipboard.write([
+          new (window as typeof window).ClipboardItem({
+            "image/png": blob,
+          }),
+        ]);
+      } catch (error) {
+        console.error("Failed to copy image", error);
+      } finally {
+        exportNode.setAttribute("data-exporting", "false");
+        setIsCopying(false);
+        setCopyRequested(false);
+        setIsExportingView(false);
+      }
+    };
+
+    void runCopy();
+  }, [copyRequested, isExportingView, exportWidth, exportHeight]);
 
   return (
     <div className="page-shell min-h-screen">
@@ -2654,7 +2765,7 @@ export default function SchedulePage() {
                   <button
                     type="button"
                     onClick={handleDownloadClick}
-                    disabled={isDownloading || !isPreviewMode}
+                    disabled={isDownloading || isCopying || !isPreviewMode}
                     className="rounded-full bg-(--accent) px-4 py-2 text-white transition hover:bg-(--accent-strong) disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isDownloading
@@ -2662,6 +2773,23 @@ export default function SchedulePage() {
                       : isPreviewMode
                         ? "Download PNG"
                         : "Switch to preview mode to download"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCopyClick}
+                    disabled={
+                      isCopying ||
+                      isDownloading ||
+                      !isPreviewMode ||
+                      !canCopyToClipboard
+                    }
+                    className="rounded-full border border-slate-200 bg-white px-4 py-2 text-slate-700 transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isCopying
+                      ? "Copying..."
+                      : isPreviewMode
+                        ? "Copy PNG"
+                        : "Switch to preview mode to copy"}
                   </button>
                 </div>
               </div>
