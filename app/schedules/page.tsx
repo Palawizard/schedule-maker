@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import AuthStatus from "../components/AuthStatus";
+import { withBasePath } from "@/lib/basePath";
 import { supabase } from "@/lib/supabase/client";
 import {
   emptySchedulePayload,
@@ -289,7 +290,7 @@ export default function SchedulesPage() {
     }
 
     try {
-      const response = await fetch("/api/share", {
+      const response = await fetch(withBasePath("/api/share"), {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -304,7 +305,9 @@ export default function SchedulesPage() {
       if (!payload.shareToken) {
         throw new Error("Share token missing.");
       }
-      const link = `${window.location.origin}/share/${payload.shareToken}`;
+      const link = `${window.location.origin}${withBasePath(
+        `/share/${payload.shareToken}`,
+      )}`;
       setShareLink(link);
       setShareStatus("ready");
     } catch (error) {
