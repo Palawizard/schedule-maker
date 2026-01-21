@@ -7,6 +7,7 @@ import {
   Sora,
   Space_Grotesk,
 } from "next/font/google";
+import AuthSessionSync from "./components/AuthSessionSync";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -49,6 +50,7 @@ export default function RootLayout({
       <body
         className={`${spaceGrotesk.variable} ${fraunces.variable} ${sora.variable} ${manrope.variable} ${playfairDisplay.variable} antialiased`}
       >
+        <AuthSessionSync />
         {children}
       </body>
     </html>

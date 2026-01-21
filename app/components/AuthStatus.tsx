@@ -55,55 +55,62 @@ export default function AuthStatus({
   const [nextPath, setNextPath] = useState("/");
 
   const loadProfile = async (authUser: User, isActive: () => boolean) => {
-    const fullName = getUserFullName(authUser);
-    const avatarUrl = getUserAvatarUrl(authUser);
+    try {
+      const fullName = getUserFullName(authUser);
+      const avatarUrl = getUserAvatarUrl(authUser);
 
-    await supabase.from("profiles").upsert(
-      {
-        id: authUser.id,
-        email: authUser.email ?? null,
-        full_name: fullName,
-        avatar_url: avatarUrl,
-      },
-      { onConflict: "id", ignoreDuplicates: true },
-    );
+      await supabase.from("profiles").upsert(
+        {
+          id: authUser.id,
+          email: authUser.email ?? null,
+          full_name: fullName,
+          avatar_url: avatarUrl,
+        },
+        { onConflict: "id", ignoreDuplicates: true },
+      );
 
-    const { data } = await supabase
-      .from("profiles")
-      .select("full_name, avatar_url")
-      .eq("id", authUser.id)
-      .maybeSingle();
+      const { data } = await supabase
+        .from("profiles")
+        .select("full_name, avatar_url")
+        .eq("id", authUser.id)
+        .maybeSingle();
 
-    if (data && (fullName || avatarUrl)) {
-      const updatePayload: ProfileRecord = {
-        full_name: data.full_name,
-        avatar_url: data.avatar_url,
-      };
-      if (!data.full_name && fullName) {
-        updatePayload.full_name = fullName;
-      }
-      if (!data.avatar_url && avatarUrl) {
-        updatePayload.avatar_url = avatarUrl;
-      }
-      if (
-        updatePayload.full_name !== data.full_name ||
-        updatePayload.avatar_url !== data.avatar_url
-      ) {
-        const { data: updated } = await supabase
-          .from("profiles")
-          .update(updatePayload)
-          .eq("id", authUser.id)
-          .select("full_name, avatar_url")
-          .maybeSingle();
-        if (isActive()) {
-          setProfile(updated ?? data);
-          return;
+      if (data && (fullName || avatarUrl)) {
+        const updatePayload: ProfileRecord = {
+          full_name: data.full_name,
+          avatar_url: data.avatar_url,
+        };
+        if (!data.full_name && fullName) {
+          updatePayload.full_name = fullName;
+        }
+        if (!data.avatar_url && avatarUrl) {
+          updatePayload.avatar_url = avatarUrl;
+        }
+        if (
+          updatePayload.full_name !== data.full_name ||
+          updatePayload.avatar_url !== data.avatar_url
+        ) {
+          const { data: updated } = await supabase
+            .from("profiles")
+            .update(updatePayload)
+            .eq("id", authUser.id)
+            .select("full_name, avatar_url")
+            .maybeSingle();
+          if (isActive()) {
+            setProfile(updated ?? data);
+            return;
+          }
         }
       }
-    }
 
-    if (isActive()) {
-      setProfile(data ?? null);
+      if (isActive()) {
+        setProfile(data ?? null);
+      }
+    } catch (error) {
+      console.warn("Failed to load profile data", error);
+      if (isActive()) {
+        setProfile(null);
+      }
     }
   };
 
@@ -112,17 +119,24 @@ export default function AuthStatus({
     const isActive = () => active;
 
     const init = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (!isActive()) return;
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (!isActive()) return;
 
-      const nextUser = data.session?.user ?? null;
-      setUser(nextUser);
-      if (nextUser) {
-        await loadProfile(nextUser, isActive);
-      } else {
-        setProfile(null);
+        const nextUser = data.session?.user ?? null;
+        setUser(nextUser);
+        if (nextUser) {
+          await loadProfile(nextUser, isActive);
+        } else {
+          setProfile(null);
+        }
+      } catch (error) {
+        console.warn("Failed to load auth session", error);
+      } finally {
+        if (isActive()) {
+          setIsLoading(false);
+        }
       }
-      setIsLoading(false);
     };
 
     void init();
@@ -135,6 +149,9 @@ export default function AuthStatus({
           await loadProfile(nextUser, isActive);
         } else if (isActive()) {
           setProfile(null);
+        }
+        if (isActive()) {
+          setIsLoading(false);
         }
       },
     );
