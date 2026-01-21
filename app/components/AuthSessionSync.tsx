@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { supabase } from "@/lib/supabase/client";
+import { getFreshSession } from "@/lib/supabase/session";
 
 export default function AuthSessionSync() {
   useEffect(() => {
@@ -10,26 +10,20 @@ export default function AuthSessionSync() {
     }
 
     let isRefreshing = false;
+    let lastRefreshAt = 0;
 
     const refreshSessionIfNeeded = async () => {
       if (isRefreshing) return;
+      const now = Date.now();
+      if (now - lastRefreshAt < 30000) return;
       isRefreshing = true;
       try {
-        const { data } = await supabase.auth.getSession();
-        const session = data.session;
-        if (!session) {
-          await supabase.auth.refreshSession();
-          return;
-        }
-        const expiresAt = session.expires_at ?? 0;
-        const now = Math.floor(Date.now() / 1000);
-        if (expiresAt - now < 60) {
-          await supabase.auth.refreshSession();
-        }
+        await getFreshSession();
       } catch (error) {
         console.warn("Failed to refresh auth session", error);
       } finally {
         isRefreshing = false;
+        lastRefreshAt = Date.now();
       }
     };
 
@@ -46,11 +40,16 @@ export default function AuthSessionSync() {
     window.addEventListener("online", handleOnline);
     document.addEventListener("visibilitychange", handleVisibility);
     void refreshSessionIfNeeded();
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void refreshSessionIfNeeded();
+    }, 5 * 60 * 1000);
 
     return () => {
       window.removeEventListener("focus", handleVisibility);
       window.removeEventListener("online", handleOnline);
       document.removeEventListener("visibilitychange", handleVisibility);
+      window.clearInterval(intervalId);
     };
   }, []);
 

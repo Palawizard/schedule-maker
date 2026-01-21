@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { stripBasePath, withBasePath } from "@/lib/basePath";
+import { getFreshSession } from "@/lib/supabase/session";
 import { supabase } from "@/lib/supabase/client";
 
 type ProfileRecord = {
@@ -120,13 +121,13 @@ export default function AuthStatus({
 
     const init = async () => {
       try {
-        const { data } = await supabase.auth.getSession();
+        const session = await getFreshSession();
         if (!isActive()) return;
 
-        const nextUser = data.session?.user ?? null;
+        const nextUser = session?.user ?? null;
         setUser(nextUser);
         if (nextUser) {
-          await loadProfile(nextUser, isActive);
+          void loadProfile(nextUser, isActive);
         } else {
           setProfile(null);
         }
@@ -146,7 +147,7 @@ export default function AuthStatus({
         const nextUser = session?.user ?? null;
         setUser(nextUser);
         if (nextUser) {
-          await loadProfile(nextUser, isActive);
+          void loadProfile(nextUser, isActive);
         } else if (isActive()) {
           setProfile(null);
         }

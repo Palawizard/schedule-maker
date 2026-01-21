@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { stripBasePath, withBasePath } from "@/lib/basePath";
+import { getFreshSession } from "@/lib/supabase/session";
 import { supabase } from "@/lib/supabase/client";
 
 type ProfileRecord = {
@@ -118,10 +119,10 @@ export default function AccountClient() {
     const isActive = () => active;
 
     const init = async () => {
-      const { data } = await supabase.auth.getSession();
+      const session = await getFreshSession();
       if (!isActive()) return;
 
-      const nextUser = data.session?.user ?? null;
+      const nextUser = session?.user ?? null;
       setUser(nextUser);
 
       if (nextUser) {
