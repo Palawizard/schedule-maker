@@ -1,5 +1,6 @@
 import Link from "next/link";
 import AuthStatus from "./components/AuthStatus";
+import { withBasePath } from "@/lib/basePath";
 
 const featureHighlights = [
   {
@@ -156,7 +157,7 @@ export default function Home() {
                     Studio snapshot
                   </span>
                   <img
-                    src="/studio-snapshot.png"
+                    src={withBasePath("/studio-snapshot.png")}
                     alt="Studio snapshot"
                     className="h-auto w-full rounded-3xl border border-slate-200 object-cover"
                   />

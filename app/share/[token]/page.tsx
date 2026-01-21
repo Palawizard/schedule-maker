@@ -7,6 +7,7 @@ import { getFontEmbedCSS, toBlob, toPng } from "html-to-image";
 import StorySchedulePreview from "../../schedule/StorySchedulePreview";
 import type { ScheduleFile } from "../../schedule/scheduleData";
 import { getLayoutMode, getPreviewSize } from "../../schedule/previewUtils";
+import { withBasePath } from "@/lib/basePath";
 
 type ShareResponse = {
   schedule_id: string;
@@ -54,7 +55,7 @@ export default function SharePage() {
 
     const loadShare = async () => {
       setStatus("loading");
-      const response = await fetch(`/api/share/${token}`);
+      const response = await fetch(withBasePath(`/api/share/${token}`));
       if (!response.ok) {
         if (active) setStatus("error");
         return;

@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
+import { stripBasePath, withBasePath } from "@/lib/basePath";
 import { supabase } from "@/lib/supabase/client";
 
 type ProfileRecord = {
@@ -45,13 +46,13 @@ export default function AuthStatus({
   showAccountLink = true,
 }: AuthStatusProps) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<ProfileRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isWorking, setIsWorking] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [avatarFailed, setAvatarFailed] = useState(false);
+  const [nextPath, setNextPath] = useState("/");
 
   const loadProfile = async (authUser: User, isActive: () => boolean) => {
     const fullName = getUserFullName(authUser);
@@ -156,17 +157,20 @@ export default function AuthStatus({
   useEffect(() => {
     setAvatarFailed(false);
   }, [avatarUrl]);
-  const nextPath = useMemo(() => {
-    const params = searchParams.toString();
-    return `${pathname}${params ? `?${params}` : ""}`;
-  }, [pathname, searchParams]);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const safePath = stripBasePath(pathname ?? "/");
+    setNextPath(`${safePath}${window.location.search}`);
+  }, [pathname]);
 
   const handleSignIn = async () => {
     setIsWorking(true);
     setAuthError(null);
-    const nextPath = `${window.location.pathname}${window.location.search}`;
-    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(
-      nextPath,
+    const nextPath = `${stripBasePath(window.location.pathname)}${
+      window.location.search
+    }`;
+    const redirectTo = `${window.location.origin}${withBasePath(
+      `/auth/callback?next=${encodeURIComponent(nextPath)}`,
     )}`;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",

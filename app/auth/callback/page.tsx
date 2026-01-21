@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { stripBasePath } from "@/lib/basePath";
 import { supabase } from "@/lib/supabase/client";
 
 export default function AuthCallback() {
@@ -15,7 +16,7 @@ export default function AuthCallback() {
 
     const finalize = async () => {
       const params = new URLSearchParams(window.location.search);
-      const next = params.get("next") || "/schedules";
+      const next = stripBasePath(params.get("next") || "/schedules");
       const code = params.get("code");
       const oauthError = params.get("error_description") || params.get("error");
 

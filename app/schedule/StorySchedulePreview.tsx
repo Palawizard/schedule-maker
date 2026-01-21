@@ -166,7 +166,7 @@ type StorySchedulePreviewProps = {
   footerSize: "regular" | "compact";
   theme?: PreviewTheme;
   layoutMode?: "portrait" | "landscape";
-  exportRef?: RefObject<HTMLDivElement>;
+  exportRef?: RefObject<HTMLDivElement | null>;
 };
 
 function FlagUK() {
@@ -2842,4 +2842,3 @@ export default function StorySchedulePreview({
     </div>
   );
 }
-
