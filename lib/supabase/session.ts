@@ -64,7 +64,7 @@ export const getFreshSession = async () => {
     const { data } = await supabase.auth.getSession();
     const session = data.session;
     if (!session) {
-      return await refreshSession(null);
+      return null;
     }
     const expiresAt = session.expires_at ?? 0;
     const now = Math.floor(Date.now() / 1000);
