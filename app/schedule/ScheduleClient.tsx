@@ -989,8 +989,13 @@ export default function ScheduleClient() {
   const [localThumbNames, setLocalThumbNames] = useState<Record<string, string>>(
     {},
   );
+  const [thumbUploadStatus, setThumbUploadStatus] = useState<
+    Record<string, "idle" | "uploading" | "error">
+  >({});
+  const [thumbUploadErrors, setThumbUploadErrors] = useState<
+    Record<string, string>
+  >({});
   const [scheduleFileError, setScheduleFileError] = useState<string | null>(null);
-  const objectUrlsRef = useRef<Record<string, string>>({});
 
   const selectedDay = useMemo(
     () => days.find((day) => day.id === selectedDayId) ?? null,
@@ -1546,13 +1551,6 @@ export default function ScheduleClient() {
     if (userTimeZone) setScheduleTimeZone(userTimeZone);
   }, []);
 
-  useEffect(() => {
-    return () => {
-      Object.values(objectUrlsRef.current).forEach((url) =>
-        URL.revokeObjectURL(url),
-      );
-    };
-  }, []);
 
   const canAddDay = days.length < 7;
 
@@ -1680,37 +1678,83 @@ export default function ScheduleClient() {
   };
 
   const updateThumbnailUrl = (dayId: string, streamId: string, value: string) => {
-    const existingUrl = objectUrlsRef.current[streamId];
-    if (existingUrl) {
-      URL.revokeObjectURL(existingUrl);
-      delete objectUrlsRef.current[streamId];
-      setLocalThumbNames((prev) => {
+    setThumbUploadStatus((prev) => ({ ...prev, [streamId]: "idle" }));
+    setThumbUploadErrors((prev) => {
+      if (!prev[streamId]) return prev;
+      const next = { ...prev };
+      delete next[streamId];
+      return next;
+    });
+    setLocalThumbNames((prev) => {
+      if (!prev[streamId]) return prev;
+      const next = { ...prev };
+      delete next[streamId];
+      return next;
+    });
+    updateStream(dayId, streamId, { thumbUrl: value });
+  };
+
+  const handleThumbnailUpload = async (
+    dayId: string,
+    streamId: string,
+    file: File,
+  ) => {
+    setThumbUploadStatus((prev) => ({ ...prev, [streamId]: "uploading" }));
+    setThumbUploadErrors((prev) => {
+      if (!prev[streamId]) return prev;
+      const next = { ...prev };
+      delete next[streamId];
+      return next;
+    });
+    setLocalThumbNames((prev) => ({ ...prev, [streamId]: file.name }));
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const response = await fetch(withBasePath("/api/upload-thumbnail"), {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || "Upload failed");
+      }
+
+      const data = (await response.json()) as { url?: string };
+      if (!data.url) {
+        throw new Error("Upload failed");
+      }
+
+      updateStream(dayId, streamId, { thumbUrl: withBasePath(data.url) });
+      setThumbUploadStatus((prev) => ({ ...prev, [streamId]: "idle" }));
+      setThumbUploadErrors((prev) => {
+        if (!prev[streamId]) return prev;
         const next = { ...prev };
         delete next[streamId];
         return next;
       });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Upload failed";
+      setThumbUploadStatus((prev) => ({ ...prev, [streamId]: "error" }));
+      setThumbUploadErrors((prev) => ({ ...prev, [streamId]: message }));
     }
-    updateStream(dayId, streamId, { thumbUrl: value });
-  };
-
-  const handleThumbnailUpload = (dayId: string, streamId: string, file: File) => {
-    const nextUrl = URL.createObjectURL(file);
-    const existingUrl = objectUrlsRef.current[streamId];
-    if (existingUrl) {
-      URL.revokeObjectURL(existingUrl);
-    }
-    objectUrlsRef.current[streamId] = nextUrl;
-    setLocalThumbNames((prev) => ({ ...prev, [streamId]: file.name }));
-    updateStream(dayId, streamId, { thumbUrl: nextUrl });
   };
 
   const clearThumbnail = (dayId: string, streamId: string) => {
-    const existingUrl = objectUrlsRef.current[streamId];
-    if (existingUrl) {
-      URL.revokeObjectURL(existingUrl);
-      delete objectUrlsRef.current[streamId];
-    }
     setLocalThumbNames((prev) => {
+      const next = { ...prev };
+      delete next[streamId];
+      return next;
+    });
+    setThumbUploadStatus((prev) => {
+      const next = { ...prev };
+      delete next[streamId];
+      return next;
+    });
+    setThumbUploadErrors((prev) => {
       const next = { ...prev };
       delete next[streamId];
       return next;
@@ -1719,11 +1763,9 @@ export default function ScheduleClient() {
   };
 
   const clearLocalThumbnails = () => {
-    Object.values(objectUrlsRef.current).forEach((url) =>
-      URL.revokeObjectURL(url),
-    );
-    objectUrlsRef.current = {};
     setLocalThumbNames({});
+    setThumbUploadStatus({});
+    setThumbUploadErrors({});
   };
 
   const updateTimeSlot = (
@@ -1813,13 +1855,18 @@ export default function ScheduleClient() {
   const removeStream = (dayId: string, streamId: string) => {
     const day = days.find((entry) => entry.id === dayId);
     if (!day || day.streams.length <= 1) return;
-    const existingUrl = objectUrlsRef.current[streamId];
-    if (existingUrl) {
-      URL.revokeObjectURL(existingUrl);
-      delete objectUrlsRef.current[streamId];
-    }
     setLocalThumbNames((prev) => {
       if (!prev[streamId]) return prev;
+      const next = { ...prev };
+      delete next[streamId];
+      return next;
+    });
+    setThumbUploadStatus((prev) => {
+      const next = { ...prev };
+      delete next[streamId];
+      return next;
+    });
+    setThumbUploadErrors((prev) => {
       const next = { ...prev };
       delete next[streamId];
       return next;
@@ -1852,14 +1899,21 @@ export default function ScheduleClient() {
   const removeDay = (dayId: string) => {
     const day = days.find((entry) => entry.id === dayId);
     if (day) {
-      day.streams.forEach((stream) => {
-        const existingUrl = objectUrlsRef.current[stream.id];
-        if (existingUrl) {
-          URL.revokeObjectURL(existingUrl);
-          delete objectUrlsRef.current[stream.id];
-        }
-      });
       setLocalThumbNames((prev) => {
+        const next = { ...prev };
+        day.streams.forEach((stream) => {
+          delete next[stream.id];
+        });
+        return next;
+      });
+      setThumbUploadStatus((prev) => {
+        const next = { ...prev };
+        day.streams.forEach((stream) => {
+          delete next[stream.id];
+        });
+        return next;
+      });
+      setThumbUploadErrors((prev) => {
         const next = { ...prev };
         day.streams.forEach((stream) => {
           delete next[stream.id];
@@ -3565,7 +3619,7 @@ export default function ScheduleClient() {
                               onChange={(event) => {
                                 const file = event.target.files?.[0];
                                 if (file) {
-                                  handleThumbnailUpload(
+                                  void handleThumbnailUpload(
                                     selectedDay.id,
                                     selectedStream.id,
                                     file,
@@ -3573,10 +3627,26 @@ export default function ScheduleClient() {
                                 }
                                 event.currentTarget.value = "";
                               }}
+                              disabled={
+                                thumbUploadStatus[selectedStream.id] ===
+                                "uploading"
+                              }
                             />
                             {localThumbNames[selectedStream.id] ? (
                               <p className="mt-2 text-xs text-slate-500">
-                                Local file: {localThumbNames[selectedStream.id]}
+                                {thumbUploadStatus[selectedStream.id] ===
+                                "uploading"
+                                  ? "Uploading"
+                                  : thumbUploadStatus[selectedStream.id] ===
+                                      "error"
+                                    ? "Upload failed"
+                                    : "Uploaded"}{" "}
+                                file: {localThumbNames[selectedStream.id]}
+                              </p>
+                            ) : null}
+                            {thumbUploadErrors[selectedStream.id] ? (
+                              <p className="mt-2 text-xs text-red-600">
+                                {thumbUploadErrors[selectedStream.id]}
                               </p>
                             ) : null}
                             <button
