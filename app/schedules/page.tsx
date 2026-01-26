@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import AuthStatus from "../components/AuthStatus";
 import { withBasePath } from "@/lib/basePath";
+import { getFreshSession } from "@/lib/supabase/session";
 import { supabase } from "@/lib/supabase/client";
 import {
   emptySchedulePayload,
@@ -117,9 +118,9 @@ export default function SchedulesPage() {
     let active = true;
 
     const init = async () => {
-      const { data } = await supabase.auth.getSession();
+      const session = await getFreshSession();
       if (!active) return;
-      const nextUser = data.session?.user ?? null;
+      const nextUser = session?.user ?? null;
       setUser(nextUser);
       if (nextUser) {
         await loadSchedules();
@@ -281,8 +282,8 @@ export default function SchedulesPage() {
     setShareStatus("loading");
     setShareError(null);
 
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
+    const session = await getFreshSession();
+    const token = session?.access_token;
     if (!token) {
       setShareStatus("error");
       setShareError("Sign in to create a share link.");

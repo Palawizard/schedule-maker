@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
@@ -8,6 +15,7 @@ import { getFontEmbedCSS, toBlob, toPng } from "html-to-image";
 import type { User } from "@supabase/supabase-js";
 import AuthStatus from "../components/AuthStatus";
 import { withBasePath } from "@/lib/basePath";
+import { getFreshSession } from "@/lib/supabase/session";
 import { supabase } from "@/lib/supabase/client";
 import StorySchedulePreview, {
   StoryDay,
@@ -72,6 +80,16 @@ const writeCookie = (name: string, value: string, maxAgeSeconds: number) => {
   const encoded = encodeURIComponent(value);
   const secure = window.location.protocol === "https:" ? "; Secure" : "";
   document.cookie = `${name}=${encoded}; Path=/; Max-Age=${maxAgeSeconds}; SameSite=Lax${secure}`;
+};
+
+const historyMaxEntries = 60;
+const historyDebounceMs = 350;
+
+const cloneSchedulePayload = (payload: ScheduleFile): ScheduleFile => {
+  if (typeof structuredClone === "function") {
+    return structuredClone(payload);
+  }
+  return JSON.parse(JSON.stringify(payload)) as ScheduleFile;
 };
 
 const fontMimeTypes: Record<string, string> = {
@@ -871,7 +889,18 @@ export default function ScheduleClient() {
   const scheduleFileInputRef = useRef<HTMLInputElement>(null);
   const lastPersistedRef = useRef<string | null>(null);
   const persistTimeoutRef = useRef<number | null>(null);
+  const historyPresentRef = useRef<ScheduleFile | null>(null);
+  const historyPresentJsonRef = useRef<string | null>(null);
+  const historyPastRef = useRef<ScheduleFile[]>([]);
+  const historyFutureRef = useRef<ScheduleFile[]>([]);
+  const historyPendingRef = useRef<{ payload: ScheduleFile; json: string } | null>(
+    null,
+  );
+  const historyDebounceRef = useRef<number | null>(null);
+  const historySkipRef = useRef(false);
   const [scheduleName, setScheduleName] = useState("Week 24");
+  const [historyPast, setHistoryPast] = useState<ScheduleFile[]>([]);
+  const [historyFuture, setHistoryFuture] = useState<ScheduleFile[]>([]);
   const [timeZoneOptions, setTimeZoneOptions] =
     useState<TimeZoneOption[]>(defaultTimeZones);
   const [scheduleTimeZone, setScheduleTimeZone] = useState(
@@ -1132,9 +1161,9 @@ export default function ScheduleClient() {
     };
 
     const init = async () => {
-      const { data } = await supabase.auth.getSession();
+      const session = await getFreshSession();
       if (!active) return;
-      const nextUser = data.session?.user ?? null;
+      const nextUser = session?.user ?? null;
       setAuthUser(nextUser);
       if (!nextUser) {
         if (active) {
@@ -1181,6 +1210,16 @@ export default function ScheduleClient() {
   useEffect(() => {
     lastPersistedRef.current = null;
     setScheduleRecordId(null);
+    historyPresentRef.current = null;
+    historyPresentJsonRef.current = null;
+    historyPendingRef.current = null;
+    historySkipRef.current = true;
+    if (historyDebounceRef.current) {
+      window.clearTimeout(historyDebounceRef.current);
+      historyDebounceRef.current = null;
+    }
+    setHistoryPast([]);
+    setHistoryFuture([]);
   }, [scheduleId]);
   useEffect(() => {
     if (!isScheduleReady || !authUser) return;
@@ -1301,6 +1340,71 @@ export default function ScheduleClient() {
     () => JSON.stringify(schedulePayload),
     [schedulePayload],
   );
+  const canUndo = historyPast.length > 0;
+  const canRedo = historyFuture.length > 0;
+
+  useEffect(() => {
+    historyPastRef.current = historyPast;
+  }, [historyPast]);
+
+  useEffect(() => {
+    historyFutureRef.current = historyFuture;
+  }, [historyFuture]);
+
+  useEffect(() => {
+    if (!isScheduleReady) return;
+
+    if (historySkipRef.current) {
+      historySkipRef.current = false;
+      historyPendingRef.current = null;
+      historyPresentRef.current = cloneSchedulePayload(schedulePayload);
+      historyPresentJsonRef.current = schedulePayloadJson;
+      return;
+    }
+
+    if (!historyPresentRef.current) {
+      historyPresentRef.current = cloneSchedulePayload(schedulePayload);
+      historyPresentJsonRef.current = schedulePayloadJson;
+      return;
+    }
+
+    if (schedulePayloadJson === historyPresentJsonRef.current) return;
+
+    historyPendingRef.current = {
+      payload: cloneSchedulePayload(schedulePayload),
+      json: schedulePayloadJson,
+    };
+
+    if (historyDebounceRef.current) {
+      window.clearTimeout(historyDebounceRef.current);
+    }
+
+    historyDebounceRef.current = window.setTimeout(() => {
+      const pending = historyPendingRef.current;
+      const previous = historyPresentRef.current;
+      if (!pending || !previous) return;
+      if (pending.json === historyPresentJsonRef.current) return;
+
+      setHistoryPast((prev) => {
+        const next = [...prev, previous];
+        if (next.length > historyMaxEntries) {
+          next.splice(0, next.length - historyMaxEntries);
+        }
+        return next;
+      });
+      setHistoryFuture([]);
+      historyPresentRef.current = pending.payload;
+      historyPresentJsonRef.current = pending.json;
+    }, historyDebounceMs);
+  }, [isScheduleReady, schedulePayload, schedulePayloadJson]);
+
+  useEffect(() => {
+    return () => {
+      if (historyDebounceRef.current) {
+        window.clearTimeout(historyDebounceRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!isScheduleReady || !scheduleId) return;
@@ -1997,6 +2101,124 @@ export default function ScheduleClient() {
     }
   };
 
+  type ApplyScheduleOptions = {
+    preserveSelection?: boolean;
+    clearLocalThumbnails?: boolean;
+    markPersisted?: boolean;
+    resetHistory?: boolean;
+    skipHistory?: boolean;
+  };
+
+  const resetHistory = (payload: ScheduleFile) => {
+    historyPresentRef.current = cloneSchedulePayload(payload);
+    historyPresentJsonRef.current = JSON.stringify(payload);
+    historyPendingRef.current = null;
+    historySkipRef.current = true;
+    if (historyDebounceRef.current) {
+      window.clearTimeout(historyDebounceRef.current);
+      historyDebounceRef.current = null;
+    }
+    setHistoryPast([]);
+    setHistoryFuture([]);
+  };
+
+  const applySchedulePayload = (
+    payload: ScheduleFile,
+    options: ApplyScheduleOptions = {},
+  ) => {
+    const {
+      preserveSelection = false,
+      clearLocalThumbnails: shouldClearThumbnails = false,
+      markPersisted = true,
+      resetHistory: shouldResetHistory = false,
+      skipHistory = false,
+    } = options;
+
+    if (shouldResetHistory) {
+      resetHistory(payload);
+    } else if (skipHistory) {
+      historySkipRef.current = true;
+      historyPendingRef.current = null;
+    }
+
+    if (shouldClearThumbnails) {
+      clearLocalThumbnails();
+    }
+
+    const fallbackDayId = payload.days[0]?.id ?? null;
+    const fallbackStreamId = payload.days[0]?.streams[0]?.id ?? null;
+    let nextSelectedDayId = fallbackDayId;
+    let nextSelectedStreamId = fallbackStreamId;
+    let nextSelectedElement: SelectedElement = fallbackDayId
+      ? { type: "day", id: fallbackDayId }
+      : null;
+
+    if (preserveSelection) {
+      const selectedDay =
+        selectedDayId &&
+        payload.days.find((entry) => entry.id === selectedDayId);
+      if (selectedDay) {
+        nextSelectedDayId = selectedDay.id;
+        if (selectedStreamId) {
+          const selectedStream = selectedDay.streams.find(
+            (entry) => entry.id === selectedStreamId,
+          );
+          nextSelectedStreamId =
+            selectedStream?.id ?? selectedDay.streams[0]?.id ?? null;
+        } else {
+          nextSelectedStreamId = selectedDay.streams[0]?.id ?? null;
+        }
+      }
+
+      if (selectedElement?.type === "header" && payload.showHeader) {
+        nextSelectedElement = { type: "header" };
+      } else if (selectedElement?.type === "footer" && payload.showFooter) {
+        nextSelectedElement = { type: "footer" };
+      } else if (selectedElement?.type === "day" && selectedDay) {
+        nextSelectedElement = { type: "day", id: selectedDay.id };
+      } else {
+        nextSelectedElement = fallbackDayId
+          ? { type: "day", id: fallbackDayId }
+          : null;
+      }
+    }
+
+    setScheduleName(payload.scheduleName);
+    setScheduleTimeZone(payload.scheduleTimeZone);
+    ensureTimeZoneOption(payload.scheduleTimeZone);
+    setExportSizeId(payload.exportSizeId);
+    syncCustomVerticalSize(payload.customVerticalSize);
+    syncCustomHorizontalSize(payload.customHorizontalSize);
+    setShowHeader(payload.showHeader);
+    setHeaderTitle(payload.headerTitle);
+    setHeaderAlignment(payload.headerAlignment);
+    setHeaderTone(payload.headerTone);
+    setShowFooter(payload.showFooter);
+    setFooterLink(payload.footerLink);
+    setFooterStyle(payload.footerStyle);
+    setFooterSize(payload.footerSize);
+    setThemeBackgroundId(payload.theme.backgroundId);
+    setThemeFontId(payload.theme.fontId);
+    setThemeCardStyleId(payload.theme.cardStyleId);
+    setThemeBorderId(payload.theme.borderId);
+    setThemeBorderWeightId(payload.theme.borderWeightId);
+    setDays(payload.days);
+    setSelectedDayId(nextSelectedDayId);
+    setSelectedStreamId(nextSelectedStreamId);
+    setSelectedElement(nextSelectedElement);
+    setActiveEmojiPickerId(null);
+    setPendingDeleteDayId(null);
+    setPendingDeleteStream(null);
+    setPendingClearAll(false);
+    setIsDownloading(false);
+    setExportRequested(false);
+    setIsExportingView(false);
+    updateIdRefFromDays(payload.days);
+    if (markPersisted) {
+      lastPersistedRef.current = JSON.stringify(payload);
+    }
+  };
+
   const handleScheduleSave = () => {
     setScheduleFileError(null);
     const payload = schedulePayload;
@@ -2018,42 +2240,12 @@ export default function ScheduleClient() {
   };
 
   const applyLoadedSchedule = (payload: ScheduleFile) => {
-    clearLocalThumbnails();
-    setScheduleName(payload.scheduleName);
-    setScheduleTimeZone(payload.scheduleTimeZone);
-    ensureTimeZoneOption(payload.scheduleTimeZone);
-    setExportSizeId(payload.exportSizeId);
-    syncCustomVerticalSize(payload.customVerticalSize);
-    setShowHeader(payload.showHeader);
-    setHeaderTitle(payload.headerTitle);
-    setHeaderAlignment(payload.headerAlignment);
-    setHeaderTone(payload.headerTone);
-    setShowFooter(payload.showFooter);
-    setFooterLink(payload.footerLink);
-    setFooterStyle(payload.footerStyle);
-    setFooterSize(payload.footerSize);
-    setThemeBackgroundId(payload.theme.backgroundId);
-    setThemeFontId(payload.theme.fontId);
-    setThemeCardStyleId(payload.theme.cardStyleId);
-    setThemeBorderId(payload.theme.borderId);
-    setThemeBorderWeightId(payload.theme.borderWeightId);
-    setDays(payload.days);
-    const nextSelectedDayId = payload.days[0]?.id ?? null;
-    const nextSelectedStreamId = payload.days[0]?.streams[0]?.id ?? null;
-    setSelectedDayId(nextSelectedDayId);
-    setSelectedStreamId(nextSelectedStreamId);
-    setSelectedElement(
-      nextSelectedDayId ? { type: "day", id: nextSelectedDayId } : null,
-    );
-    setActiveEmojiPickerId(null);
-    setPendingDeleteDayId(null);
-    setPendingDeleteStream(null);
-    setPendingClearAll(false);
-    setIsDownloading(false);
-    setExportRequested(false);
-    setIsExportingView(false);
-    updateIdRefFromDays(payload.days);
-    lastPersistedRef.current = JSON.stringify(payload);
+    applySchedulePayload(payload, {
+      preserveSelection: false,
+      clearLocalThumbnails: true,
+      markPersisted: true,
+      resetHistory: true,
+    });
   };
 
   const handleScheduleLoad = async (file: File) => {
@@ -2081,6 +2273,95 @@ export default function ScheduleClient() {
     event.currentTarget.value = "";
   };
 
+  const handleUndo = useCallback(() => {
+    const past = historyPastRef.current;
+    if (!past.length) return;
+    const previous = past[past.length - 1];
+    const current =
+      historyPresentRef.current ?? cloneSchedulePayload(schedulePayload);
+    const nextPast = past.slice(0, -1);
+    const nextFuture = [current, ...historyFutureRef.current];
+
+    setHistoryPast(nextPast);
+    setHistoryFuture(nextFuture);
+    historyPresentRef.current = cloneSchedulePayload(previous);
+    historyPresentJsonRef.current = JSON.stringify(previous);
+    historySkipRef.current = true;
+    historyPendingRef.current = null;
+    if (historyDebounceRef.current) {
+      window.clearTimeout(historyDebounceRef.current);
+      historyDebounceRef.current = null;
+    }
+
+    applySchedulePayload(previous, {
+      preserveSelection: true,
+      clearLocalThumbnails: false,
+      markPersisted: false,
+      skipHistory: true,
+    });
+  }, [applySchedulePayload, schedulePayload]);
+
+  const handleRedo = useCallback(() => {
+    const future = historyFutureRef.current;
+    if (!future.length) return;
+    const next = future[0];
+    const current =
+      historyPresentRef.current ?? cloneSchedulePayload(schedulePayload);
+    const nextFuture = future.slice(1);
+    const nextPast = [...historyPastRef.current, current];
+    if (nextPast.length > historyMaxEntries) {
+      nextPast.splice(0, nextPast.length - historyMaxEntries);
+    }
+
+    setHistoryPast(nextPast);
+    setHistoryFuture(nextFuture);
+    historyPresentRef.current = cloneSchedulePayload(next);
+    historyPresentJsonRef.current = JSON.stringify(next);
+    historySkipRef.current = true;
+    historyPendingRef.current = null;
+    if (historyDebounceRef.current) {
+      window.clearTimeout(historyDebounceRef.current);
+      historyDebounceRef.current = null;
+    }
+
+    applySchedulePayload(next, {
+      preserveSelection: true,
+      clearLocalThumbnails: false,
+      markPersisted: false,
+      skipHistory: true,
+    });
+  }, [applySchedulePayload, schedulePayload]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      if (event.defaultPrevented) return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.isContentEditable ||
+          target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT")
+      ) {
+        return;
+      }
+      const key = event.key.toLowerCase();
+      if (key === "z" && !event.shiftKey) {
+        event.preventDefault();
+        handleUndo();
+        return;
+      }
+      if (key === "y" || (key === "z" && event.shiftKey)) {
+        event.preventDefault();
+        handleRedo();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleRedo, handleUndo]);
+
   const openShareModal = async () => {
     if (!scheduleId) return;
     setShareModalOpen(true);
@@ -2088,8 +2369,8 @@ export default function ScheduleClient() {
     setShareLink("");
     setShareError(null);
 
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
+    const session = await getFreshSession();
+    const token = session?.access_token;
     if (!token) {
       setShareStatus("error");
       setShareError("Sign in to create a share link.");
@@ -2487,29 +2768,51 @@ export default function ScheduleClient() {
               <h1 className="font-display text-3xl text-slate-900 sm:text-4xl">
                 Schedule workshop
               </h1>
-              <div className="flex items-center rounded-full border border-slate-200 bg-white p-1 text-xs font-semibold">
-                <button
-                  type="button"
-                  onClick={() => setIsPreviewMode(false)}
-                  className={`rounded-full px-3 py-1 transition ${
-                    !isPreviewMode
-                      ? "bg-(--accent) text-white"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsPreviewMode(true)}
-                  className={`rounded-full px-3 py-1 transition ${
-                    isPreviewMode
-                      ? "bg-(--accent) text-white"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
-                >
-                  Preview
-                </button>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleUndo}
+                    disabled={!canUndo}
+                    title="Undo (Ctrl+Z)"
+                    className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Undo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRedo}
+                    disabled={!canRedo}
+                    title="Redo (Ctrl+Y)"
+                    className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Redo
+                  </button>
+                </div>
+                <div className="flex items-center rounded-full border border-slate-200 bg-white p-1 text-xs font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => setIsPreviewMode(false)}
+                    className={`rounded-full px-3 py-1 transition ${
+                      !isPreviewMode
+                        ? "bg-(--accent) text-white"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsPreviewMode(true)}
+                    className={`rounded-full px-3 py-1 transition ${
+                      isPreviewMode
+                        ? "bg-(--accent) text-white"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Preview
+                  </button>
+                </div>
               </div>
             </div>
             <p className="mt-2 max-w-2xl text-sm text-slate-600">
