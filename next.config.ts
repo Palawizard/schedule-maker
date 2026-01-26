@@ -9,7 +9,6 @@ const nextConfig: NextConfig = {
   output: "standalone",
   ...(basePath ? { basePath } : {}),
   trailingSlash: true,
-  outputFileTracingRoot: projectRoot,
   turbopack: {
     root: projectRoot,
   },
